@@ -1,0 +1,13 @@
+{
+  "name": "laravel-react-monorepo",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Fullstack monorepo with Laravel API (Sanctum, PostgreSQL) and React SPA (TanStack Router, TanStack Query, Tailwind CSS v4)",
+  "scripts": {
+    "dev": "npm --prefix frontend run dev",
+    "dev:frontend": "npm --prefix frontend run dev",
+    "dev:backend": "cd backend && php artisan serve",
+    "build:frontend": "npm --prefix frontend run build",
+    "migrate:backend": "cd backend && php artisan migrate"
+  }
+}
