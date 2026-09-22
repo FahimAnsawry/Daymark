@@ -3,8 +3,11 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Http\Requests\StoreTaskRequest;
+use App\Http\Resources\TaskResource;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 
 class DemoTaskController extends Controller
 {
@@ -41,41 +44,38 @@ class DemoTaskController extends Controller
     /**
      * Get all demo tasks.
      */
-    public function index(): JsonResponse
+    public function index(): AnonymousResourceCollection
     {
-        return response()->json([
-            'data' => session()->get('demo_tasks', self::$tasks),
-        ]);
+        $tasks = session()->get('demo_tasks', self::$tasks);
+
+        return TaskResource::collection(collect($tasks));
     }
 
     /**
      * Create a demo task.
      */
-    public function store(Request $request): JsonResponse
+    public function store(StoreTaskRequest $request): JsonResponse
     {
-        $validated = $request->validate([
-            'title' => 'required|string|max:255',
-            'description' => 'nullable|string',
-            'tag' => 'nullable|string|max:50',
-        ]);
+        $validated = $request->validated();
 
         $tasks = session()->get('demo_tasks', self::$tasks);
         $newTask = [
-            'id' => count($tasks) > 0 ? max(array_column($tasks, 'id')) + 1 : 1,
+            'id' => count($tasks) > 0 ? max(array_column($tasks, 'id')) : 0,
             'title' => $validated['title'],
             'description' => $validated['description'] ?? '',
             'completed' => false,
             'tag' => $validated['tag'] ?? 'General',
             'created_at' => now()->format('Y-m-d H:i:s'),
         ];
+        $newTask['id'] += 1;
 
         array_unshift($tasks, $newTask);
         session()->put('demo_tasks', $tasks);
 
-        return response()->json([
-            'message' => 'Task created successfully',
-            'data' => $newTask,
-        ], 201);
+        return (new TaskResource($newTask))
+            ->additional(['message' => 'Task created successfully'])
+            ->response()
+            ->setStatusCode(201);
     }
 
     /**
@@ -88,22 +88,21 @@ class DemoTaskController extends Controller
 
         foreach ($tasks as &$task) {
             if ($task['id'] === $id) {
-                $task['completed'] = !$task['completed'];
+                $task['completed'] = ! $task['completed'];
                 $updated = $task;
                 break;
             }
         }
 
-        if (!$updated) {
+        if (! $updated) {
             return response()->json(['message' => 'Task not found'], 404);
         }
 
         session()->put('demo_tasks', $tasks);
 
-        return response()->json([
-            'message' => 'Task updated successfully',
-            'data' => $updated,
-        ]);
+        return (new TaskResource($updated))
+            ->additional(['message' => 'Task updated successfully'])
+            ->response();
     }
 
     /**

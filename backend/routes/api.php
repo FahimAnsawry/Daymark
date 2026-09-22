@@ -17,13 +17,33 @@ use Illuminate\Support\Facades\Route;
 |
 */
 
-// Health and Diagnostics
+// API Root and Diagnostics
+Route::get('/', function () {
+    return response()->json([
+        'status' => 'online',
+        'message' => 'Laravel React API is running',
+        'version' => '1.0.0',
+        'endpoints' => [
+            'health' => url('/api/health'),
+            'tasks' => url('/api/tasks'),
+            'auth' => [
+                'register' => url('/api/auth/register'),
+                'login' => url('/api/auth/login'),
+                'me' => url('/api/auth/me'),
+            ],
+        ],
+    ]);
+});
 Route::get('/health', HealthController::class);
 
 // Authentication Routes
 Route::prefix('auth')->group(function () {
     Route::post('/register', [AuthController::class, 'register']);
     Route::post('/login', [AuthController::class, 'login']);
+
+    // Socialite OAuth Routes
+    Route::get('/{provider}/redirect', [AuthController::class, 'redirectToProvider']);
+    Route::match(['get', 'post'], '/{provider}/callback', [AuthController::class, 'handleProviderCallback']);
 
     Route::middleware('auth:sanctum')->group(function () {
         Route::get('/me', [AuthController::class, 'me']);

@@ -28,3 +28,7 @@ frontend/dist-ssr/
 # TanStack / Vite temporary files
 frontend/src/routeTree.gen.ts.tmp
 .oxlint-cache
+.tanstack/
+frontend/.tanstack/
+.impeccable/
+frontend/.impeccable/
