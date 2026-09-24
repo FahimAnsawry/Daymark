@@ -27,18 +27,15 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)')
 
     const applyTheme = () => {
-      const isDark =
-        theme === 'dark' || (theme === 'system' && mediaQuery.matches)
+      const isDark = theme === 'dark' || (theme === 'system' && mediaQuery.matches)
 
       const currentResolved = isDark ? 'dark' : 'light'
       setResolvedTheme(currentResolved)
 
       if (isDark) {
         root.classList.add('dark')
-        root.style.colorScheme = 'dark'
       } else {
         root.classList.remove('dark')
-        root.style.colorScheme = 'light'
       }
     }
 
@@ -70,5 +67,3 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     </ThemeContext.Provider>
   )
 }
-
-

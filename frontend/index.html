@@ -1,9 +1,12 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" class="scheme-light dark:scheme-dark">
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400..700&family=Space+Grotesk:wght@400..700&display=swap" rel="stylesheet" />
     <title>Daymark — Plan your day. Keep your life.</title>
     <script>
       (function() {
@@ -12,16 +15,14 @@
           var supportDarkMode = window.matchMedia('(prefers-color-scheme: dark)').matches;
           if (theme === 'dark' || (!theme && supportDarkMode)) {
             document.documentElement.classList.add('dark');
-            document.documentElement.style.colorScheme = 'dark';
           } else {
             document.documentElement.classList.remove('dark');
-            document.documentElement.style.colorScheme = 'light';
           }
         } catch (e) {}
       })();
     </script>
   </head>
-  <body>
+  <body class="min-h-screen min-w-[320px] bg-app-background font-sans text-[#1f2937] transition-colors duration-250 dark:text-[#f3f4f6] motion-reduce:transition-none">
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   <!-- impeccable-live-start -->

@@ -9,6 +9,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Validation\Rules\Password;
 use Laravel\Socialite\Facades\Socialite;
 use Symfony\Component\HttpFoundation\Response;
@@ -90,6 +91,19 @@ class AuthController extends Controller
     {
         $this->ensureProviderIsSupported($provider);
 
+        $clientId = config("services.{$provider}.client_id");
+        if (empty($clientId)) {
+            $errorMessage = "Google Client ID is not configured in backend/.env. Please set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET.";
+            if ($request->expectsJson() || $request->query('json')) {
+                return response()->json([
+                    'message' => $errorMessage,
+                ], 422);
+            }
+
+            $frontendUrl = rtrim(config('app.frontend_url', env('FRONTEND_URL', 'http://localhost:5173')), '/');
+            return redirect()->to($frontendUrl . '/login?error=' . urlencode($errorMessage));
+        }
+
         $targetUrl = Socialite::driver($provider)->stateless()->redirect()->getTargetUrl();
 
         if ($request->expectsJson() || $request->query('json')) {
@@ -107,6 +121,51 @@ class AuthController extends Controller
         $this->ensureProviderIsSupported($provider);
 
         try {
+            // Support for Google Identity Services / One Tap (id_token / credential)
+            if ($provider === 'google' && $request->isMethod('post') && ($request->filled('credential') || $request->filled('id_token'))) {
+                $idToken = $request->input('credential') ?? $request->input('id_token');
+                $tokenInfoResponse = Http::withOptions([
+                    'verify' => file_exists(storage_path('cacert.pem')) ? storage_path('cacert.pem') : true,
+                ])->get('https://oauth2.googleapis.com/tokeninfo', ['id_token' => $idToken]);
+
+                if (! $tokenInfoResponse->successful()) {
+                    throw new \Exception('Invalid Google ID token: ' . ($tokenInfoResponse->json('error_description') ?? 'Verification failed'));
+                }
+
+                $googleData = $tokenInfoResponse->json();
+                $email = $googleData['email'] ?? null;
+                $name = $googleData['name'] ?? $googleData['given_name'] ?? 'Google User';
+                $googleId = (string) ($googleData['sub'] ?? '');
+
+                if (! $email) {
+                    throw new \Exception('No email address provided by Google credential');
+                }
+
+                $user = DB::transaction(function () use ($googleId, $email, $name): User {
+                    $user = User::where('email', $email)->first();
+
+                    if (! $user) {
+                        $user = User::create([
+                            'name' => $name,
+                            'email' => $email,
+                            'email_verified_at' => now(),
+                        ]);
+                    }
+
+                    $user->linkVerifiedGoogleAccount($googleId);
+
+                    return $user;
+                });
+
+                $token = $user->createToken('auth-token')->plainTextToken;
+
+                return response()->json([
+                    'message' => 'Login successful',
+                    'user' => $user->load('accounts'),
+                    'token' => $token,
+                ]);
+            }
+
             if ($request->isMethod('post') && $request->filled('token')) {
                 $socialUser = Socialite::driver($provider)->stateless()->userFromToken($request->input('token'));
             } else {
@@ -120,7 +179,7 @@ class AuthController extends Controller
             }
 
             $frontendUrl = rtrim(config('app.frontend_url', env('FRONTEND_URL', 'http://localhost:5173')), '/');
-            return redirect()->to($frontendUrl . '/login?error=' . urlencode('Social authentication failed'));
+            return redirect()->to($frontendUrl . '/login?error=' . urlencode('Social authentication failed: ' . $e->getMessage()));
         }
 
         $email = $socialUser->getEmail();
@@ -173,6 +232,38 @@ class AuthController extends Controller
     }
 
     /**
+     * Local development demo login for Google authentication.
+     */
+    public function loginWithDemoGoogle(Request $request): JsonResponse
+    {
+        if (! app()->environment('local')) {
+            abort(403, 'Demo login is only available in local development mode.');
+        }
+
+        $user = DB::transaction(function (): User {
+            $user = User::firstOrCreate(
+                ['email' => 'alex.rivera@daymark.test'],
+                [
+                    'name' => 'Alex Rivera',
+                    'email_verified_at' => now(),
+                ],
+            );
+
+            $user->linkVerifiedGoogleAccount('google_demo_id_108293849102');
+
+            return $user;
+        });
+
+        $token = $user->createToken('auth-token')->plainTextToken;
+
+        return response()->json([
+            'message' => 'Successfully signed in with Google (Dev Demo)',
+            'user' => $user->load('accounts'),
+            'token' => $token,
+        ]);
+    }
+
+    /**
      * Handle user logout.
      */
     public function logout(Request $request): JsonResponse
@@ -191,6 +282,67 @@ class AuthController extends Controller
     {
         return response()->json([
             'user' => $request->user()->load('accounts'),
+        ]);
+    }
+
+    /**
+     * Update authenticated user profile.
+     */
+    public function updateProfile(Request $request): JsonResponse
+    {
+        $user = $request->user();
+
+        $validated = $request->validate([
+            'name' => ['required', 'string', 'max:255'],
+            'email' => ['required', 'string', 'email', 'max:255', 'unique:users,email,' . $user->id],
+        ]);
+
+        $user->update([
+            'name' => $validated['name'],
+            'email' => $validated['email'],
+        ]);
+
+        return response()->json([
+            'message' => 'Profile updated successfully',
+            'user' => $user->fresh()->load('accounts'),
+        ]);
+    }
+
+    /**
+     * Update authenticated user password.
+     */
+    public function updatePassword(Request $request): JsonResponse
+    {
+        $user = $request->user();
+
+        $validated = $request->validate([
+            'current_password' => ['required', 'string'],
+            'password' => ['required', 'string', 'confirmed', Password::defaults()],
+        ]);
+
+        $passwordAccount = $user->passwordAccount;
+        if ($passwordAccount && ! Hash::check($validated['current_password'], $passwordAccount->password_hash)) {
+            return response()->json([
+                'message' => 'The provided current password does not match our records.',
+                'errors' => [
+                    'current_password' => ['The provided current password does not match our records.'],
+                ],
+            ], 422);
+        }
+
+        if ($passwordAccount) {
+            $passwordAccount->update([
+                'password_hash' => Hash::make($validated['password']),
+            ]);
+        } else {
+            $user->accounts()->create([
+                'provider' => Account::PROVIDER_PASSWORD,
+                'password_hash' => Hash::make($validated['password']),
+            ]);
+        }
+
+        return response()->json([
+            'message' => 'Password updated successfully',
         ]);
     }
 

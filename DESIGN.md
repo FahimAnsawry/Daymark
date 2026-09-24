@@ -7,16 +7,16 @@ Daymark is a calm editorial planning product: warm paper surfaces, deep botanica
 ## Typography
 
 - Body: DM Sans, with a system sans fallback.
-- Display: Georgia / Times New Roman serif for reflective headings and quotes.
-- Headings use generous scale, tight tracking, and light weight; body copy stays readable and relaxed.
+- Display: Space Grotesk for energetic headings and quotes, with a system sans fallback.
+- Headings use generous scale and confident weight; body copy stays readable and relaxed.
 
 ## Color
 
-- Paper: `#f4f1e9`
+- Paper: `#f7f6f2`
 - Ink: `#27352f`
-- Deep green: `#203b32` / `#315844`
-- Sage lime: `#e5efc4` / `#d5dfac`
-- Terracotta: `#b36d58`
+- Ink: `#1f2937` / `#ea580c`
+- Soft orange: `#fed7aa` / `#fdba74`
+- Orange: `#ea580c`
 - Muted text: `#727b73`
 - Dark surface: `#111a17`
 

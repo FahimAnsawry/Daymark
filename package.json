@@ -8,6 +8,7 @@
     "dev:frontend": "npm --prefix frontend run dev",
     "dev:backend": "cd backend && php artisan serve",
     "build:frontend": "npm --prefix frontend run build",
+    "format": "npm --prefix frontend run format",
     "migrate:backend": "cd backend && php artisan migrate"
   }
 }

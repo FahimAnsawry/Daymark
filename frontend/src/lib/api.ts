@@ -4,7 +4,7 @@ export const api = axios.create({
   baseURL: import.meta.env.VITE_API_URL || '/api',
   headers: {
     'Content-Type': 'application/json',
-    'Accept': 'application/json',
+    Accept: 'application/json',
     'X-Requested-With': 'XMLHttpRequest',
   },
   withCredentials: true,
@@ -18,3 +18,14 @@ api.interceptors.request.use((config) => {
   }
   return config
 })
+
+// Handle 401 responses by clearing expired token
+api.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (error.response?.status === 401) {
+      localStorage.removeItem('auth_token')
+    }
+    return Promise.reject(error)
+  },
+)

@@ -1,0 +1,6 @@
+node_modules
+dist
+.git
+backend/vendor
+backend/storage
+frontend/src/routeTree.gen.ts

@@ -42,11 +42,14 @@ Route::prefix('auth')->group(function () {
     Route::post('/login', [AuthController::class, 'login']);
 
     // Socialite OAuth Routes
+    Route::post('/google/demo', [AuthController::class, 'loginWithDemoGoogle']);
     Route::get('/{provider}/redirect', [AuthController::class, 'redirectToProvider']);
     Route::match(['get', 'post'], '/{provider}/callback', [AuthController::class, 'handleProviderCallback']);
 
     Route::middleware('auth:sanctum')->group(function () {
         Route::get('/me', [AuthController::class, 'me']);
+        Route::put('/profile', [AuthController::class, 'updateProfile']);
+        Route::put('/password', [AuthController::class, 'updatePassword']);
         Route::post('/logout', [AuthController::class, 'logout']);
     });
 });

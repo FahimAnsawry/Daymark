@@ -14,6 +14,9 @@ export default defineConfig({
     tailwindcss(),
     react(),
   ],
+  optimizeDeps: {
+    include: ['@hookform/resolvers/zod'],
+  },
   resolve: {
     alias: {
       '@': path.resolve(import.meta.dirname, './src'),
