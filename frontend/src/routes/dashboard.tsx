@@ -33,6 +33,7 @@ import {
   type DashboardView,
 } from '../components/DashboardSidebar'
 import { ConfirmDeleteDialog } from '../components/ConfirmDeleteDialog'
+import { ConfirmCompleteDialog } from '../components/ConfirmCompleteDialog'
 import { EditTaskDialog } from '../components/EditTaskDialog'
 import { FocusPanel } from '../components/FocusPanel'
 import { CalendarSettings } from '../components/CalendarSettings'
@@ -199,7 +200,8 @@ function DashboardPage() {
       | { type: 'task'; task: Task }
       | { type: 'project'; projectName: string; taskCount: number }
       | null
-    >(null)
+    >(null),
+    [completeTarget, setCompleteTarget] = useState<Task | null>(null)
   const search = useRef<HTMLInputElement>(null)
   const projectTrigger = useRef<HTMLButtonElement>(null)
   const dateTrigger = useRef<HTMLButtonElement>(null)
@@ -477,7 +479,16 @@ function DashboardPage() {
   }
   const completeTask = (task: Task) => {
     if (task.reminder) return
-    if (isSaved(task)) completeTaskMutation.mutate(task)
+    if (isTaskDone(task)) {
+      if (isSaved(task)) completeTaskMutation.mutate(task)
+      return
+    }
+    setCompleteTarget(task)
+  }
+  const confirmComplete = () => {
+    if (!completeTarget) return
+    if (isSaved(completeTarget)) completeTaskMutation.mutate(completeTarget)
+    setCompleteTarget(null)
   }
   const quickAdd = () => {
     const title = quickDraft.trim()
@@ -1352,6 +1363,12 @@ function DashboardPage() {
         confirmLabel={deleteTarget?.type === 'task' ? 'Delete task' : 'Delete project'}
         onClose={() => setDeleteTarget(null)}
         onConfirm={confirmDelete}
+      />
+      <ConfirmCompleteDialog
+        isOpen={Boolean(completeTarget)}
+        task={completeTarget}
+        onClose={() => setCompleteTarget(null)}
+        onConfirm={confirmComplete}
       />
       <EditTaskDialog
         task={editingTask}
