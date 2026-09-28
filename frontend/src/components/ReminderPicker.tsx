@@ -27,6 +27,7 @@ type Props = {
   suggestedTime?: string
   variant?: 'field' | 'icon'
   taskTitle?: string
+  canRemove?: boolean
 }
 
 const EARLY_MINUTES = 10
@@ -52,6 +53,7 @@ export function ReminderPicker({
   suggestedTime,
   variant = 'field',
   taskTitle,
+  canRemove = true,
 }: Props) {
   const [open, setOpen] = useState(false)
   // Edits stay in the menu until Save, so nothing changes halfway through.
@@ -226,7 +228,7 @@ export function ReminderPicker({
           </div>
 
           <div className="mt-3 flex items-center gap-2">
-            {value && (
+            {canRemove && value && (
               <button
                 type="button"
                 onClick={remove}

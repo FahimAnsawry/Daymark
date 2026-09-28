@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { api } from './api'
-import { taskKeys } from './tasks'
+import { api } from './api.ts'
+import { taskKeys } from './tasks.ts'
 
 /** A focus session (Plus). Pauses happen in the browser; the server stores focused time. */
 export type FocusSession = {

@@ -131,7 +131,11 @@ function usePushReminders(enabled: boolean) {
  * Daymark is closed; otherwise the open tab shows them. The server emails them too,
  * and handles quiet hours.
  */
-export function useReminderNotifications(tasks: Task[], enabled: boolean) {
+export function useReminderNotifications(
+  tasks: Task[],
+  enabled: boolean,
+  onAutoComplete?: (task: Task) => void,
+) {
   const pushActive = usePushReminders(enabled)
   useEffect(() => {
     if (!enabled || pushActive) return
@@ -147,9 +151,12 @@ export function useReminderNotifications(tasks: Task[], enabled: boolean) {
             body: [task.time, task.project].filter(Boolean).join(' · ') || 'A gentle reminder',
             tag: `daymark-task-${task.id}`,
           })
-          void api.post(`/tasks/${task.id}/complete`, { completed_on: localDate(new Date()) })
+          void api
+            .post(`/tasks/${task.id}/auto-complete`, { completed_on: localDate(new Date()) })
+            .then(() => onAutoComplete?.(task))
+            .catch(() => {})
         }, at - now),
       )
     return () => timers.forEach((timer) => window.clearTimeout(timer))
-  }, [tasks, enabled, pushActive])
+  }, [tasks, enabled, pushActive, onAutoComplete])
 }

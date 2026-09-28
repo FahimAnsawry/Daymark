@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient, type QueryKey } from '@tanstack/react-query'
 import toast from 'react-hot-toast'
-import { api } from './api'
-import { buildImportPayload, legacyStorageKeys } from './task-import'
+import { api } from './api.ts'
+import { buildImportPayload, legacyStorageKeys } from './task-import.ts'
 
 export type Repeat = 'none' | 'daily' | 'weekly' | 'monthly'
 
@@ -43,11 +43,15 @@ export type TaskInput = Omit<
 
 /** Fields that can change on an existing task from the dashboard. */
 export type TaskChanges = {
+  title?: string
+  due?: string
+  time?: string
+  project?: string
+  label?: string
+  repeat?: Repeat
   reminder?: Reminder | null
   reminder_early?: boolean
   reminder_frequency?: ReminderFrequency | null
-  /** Set alongside a clock-time reminder on a task that had no date. */
-  due?: string
   assignee?: Person | null
 }
 
@@ -298,22 +302,40 @@ export function useCompleteTask() {
   )
 }
 
+export function useAutoCompleteTask() {
+  return useOptimisticMutation<Task>(
+    (task) => api.post(`/tasks/${task.id}/auto-complete`, { completed_on: localDate(new Date()) }),
+    (task, client) =>
+      client.setQueryData<Task[]>(taskKeys.tasks, (current = []) =>
+        current.map((item) => (item.id === task.id ? completeTaskLocally(item) : item)),
+      ),
+    'Could not auto-complete the task.',
+  )
+}
+
 export function useUpdateTask() {
   return useOptimisticMutation<{ task: Task; changes: TaskChanges }>(
     ({ task, changes }) =>
       api.patch(`/tasks/${task.id}`, {
+        ...('title' in changes && { title: changes.title }),
+        ...('due' in changes && { due: changes.due }),
+        ...('time' in changes && { time: changes.time }),
+        ...('project' in changes && { project: changes.project }),
+        ...('label' in changes && { label: changes.label }),
+        ...('repeat' in changes && { repeat: changes.repeat }),
         ...('reminder' in changes && { reminder: changes.reminder }),
         ...('reminder_early' in changes && { reminder_early: changes.reminder_early }),
         ...('reminder_frequency' in changes && {
           reminder_frequency: changes.reminder_frequency,
         }),
-        ...('due' in changes && { due: changes.due }),
         ...('assignee' in changes && { assignee_id: changes.assignee?.id ?? null }),
       }),
-    ({ task, changes }, client) =>
+    ({ task, changes }, client) => {
       client.setQueryData<Task[]>(taskKeys.tasks, (current = []) =>
         current.map((item) => (item.id === task.id ? { ...item, ...changes } : item)),
-      ),
+      )
+      if (changes.project) addProjectToCache(client, changes.project)
+    },
     'Could not update the task. Please try again.',
   )
 }

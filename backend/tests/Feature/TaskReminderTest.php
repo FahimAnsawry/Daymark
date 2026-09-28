@@ -84,7 +84,7 @@ class TaskReminderTest extends TestCase
         $task->update(['reminded_at' => now()]);
         Sanctum::actingAs($user);
 
-        $this->postJson("/api/tasks/{$task->id}/complete", ['completed_on' => '2026-10-01'])->assertOk();
+        $this->postJson("/api/tasks/{$task->id}/auto-complete", ['completed_on' => '2026-10-01'])->assertOk();
 
         $task->refresh();
         $this->assertSame('2026-10-02 09:00:00', $task->remind_at->toDateTimeString());
@@ -293,15 +293,17 @@ class TaskReminderTest extends TestCase
         $this->assertSame('2026-03-31 09:00:00', $task->nextReminderAfter(CarbonImmutable::parse('2026-03-02 12:00:00'))->toDateTimeString());
     }
 
-    public function test_clearing_a_reminder_clears_its_frequency(): void
+    public function test_reminder_cannot_be_removed_from_a_reminder_task(): void
     {
         $user = User::factory()->subscribed(Plan::Plus)->create();
         $task = Task::factory()->for($user)->create(['due_date' => '2026-10-01', 'reminder' => '17:00', 'reminder_frequency' => 'weekly']);
         Sanctum::actingAs($user);
 
-        $this->patchJson("/api/tasks/{$task->id}", ['reminder' => null])->assertOk()->assertJsonPath('data.reminder_frequency', null);
+        $this->patchJson("/api/tasks/{$task->id}", ['reminder' => null])
+            ->assertUnprocessable()
+            ->assertJsonPath('message', 'Reminders cannot be removed from a reminder task.');
 
-        $this->assertNull($task->fresh()->remind_at);
+        $this->assertSame('17:00', $task->fresh()->reminder);
     }
 
     public function test_once_reminder_is_completed_after_sending(): void
@@ -349,7 +351,23 @@ class TaskReminderTest extends TestCase
         ]);
     }
 
-    public function test_completing_and_uncompleting_a_recurring_reminder_task(): void
+    public function test_reminder_task_cannot_be_manually_completed(): void
+    {
+        $user = User::factory()->subscribed(Plan::Plus)->create();
+        $task = Task::factory()->for($user)->create([
+            'due_date' => '2026-10-01',
+            'reminder' => '09:00',
+        ]);
+        Sanctum::actingAs($user);
+
+        $this->postJson("/api/tasks/{$task->id}/complete", ['completed_on' => '2026-10-01'])
+            ->assertUnprocessable()
+            ->assertJsonPath('message', 'Reminder tasks cannot be manually completed. They are automatically completed at their scheduled time.');
+
+        $this->assertFalse($task->fresh()->done);
+    }
+
+    public function test_reminder_task_can_be_auto_completed_via_endpoint(): void
     {
         $user = User::factory()->subscribed(Plan::Plus)->create();
         $task = Task::factory()->for($user)->create([
@@ -359,30 +377,74 @@ class TaskReminderTest extends TestCase
         ]);
         Sanctum::actingAs($user);
 
-        // Complete for today
-        $this->postJson("/api/tasks/{$task->id}/complete", ['completed_on' => '2026-10-01'])
+        $this->postJson("/api/tasks/{$task->id}/auto-complete", ['completed_on' => '2026-10-01'])
             ->assertOk()
             ->assertJsonPath('data.done', false)
             ->assertJsonPath('data.due', '2026-10-02');
 
-        $fresh = $task->fresh();
-        $this->assertNotNull($fresh->completed_at);
         $this->assertDatabaseHas('task_completions', [
             'task_id' => $task->id,
             'completed_on' => '2026-10-01',
         ]);
+    }
 
-        // Uncomplete (clicking again on the same date)
-        $this->postJson("/api/tasks/{$task->id}/complete", ['completed_on' => '2026-10-01'])
+    public function test_querying_tasks_auto_completes_due_reminders(): void
+    {
+        $user = User::factory()->subscribed(Plan::Plus)->create(['timezone' => 'UTC']);
+        $task = Task::factory()->for($user)->create([
+            'due_date' => '2026-10-01',
+            'reminder' => '09:00',
+        ]);
+        Sanctum::actingAs($user);
+
+        $this->travelTo(CarbonImmutable::parse('2026-10-01 09:05:00'));
+
+        $this->getJson('/api/tasks')
             ->assertOk()
-            ->assertJsonPath('data.done', false)
-            ->assertJsonPath('data.due', '2026-10-01');
+            ->assertJsonPath('data.0.done', true);
+
+        $this->assertTrue($task->fresh()->done);
+    }
+
+    public function test_reminder_task_can_be_edited(): void
+    {
+        $user = User::factory()->subscribed(Plan::Plus)->create();
+        $task = Task::factory()->for($user)->create([
+            'title' => 'Initial Title',
+            'due_date' => '2026-10-01',
+            'reminder' => '09:00',
+        ]);
+        Sanctum::actingAs($user);
+
+        $this->patchJson("/api/tasks/{$task->id}", [
+            'title' => 'Updated Title',
+            'due' => '2026-10-05',
+            'reminder' => '11:00',
+        ])
+            ->assertOk()
+            ->assertJsonPath('data.title', 'Updated Title')
+            ->assertJsonPath('data.due', '2026-10-05')
+            ->assertJsonPath('data.reminder', '11:00');
 
         $fresh = $task->fresh();
-        $this->assertNull($fresh->completed_at);
-        $this->assertDatabaseMissing('task_completions', [
-            'task_id' => $task->id,
-            'completed_on' => '2026-10-01',
+        $this->assertSame('Updated Title', $fresh->title);
+        $this->assertSame('2026-10-05', $fresh->due_date->toDateString());
+        $this->assertSame('11:00', $fresh->reminder);
+    }
+
+    public function test_reminder_task_can_be_deleted(): void
+    {
+        $user = User::factory()->subscribed(Plan::Plus)->create();
+        $task = Task::factory()->for($user)->create([
+            'due_date' => '2026-10-01',
+            'reminder' => '09:00',
         ]);
+        Sanctum::actingAs($user);
+
+        $this->deleteJson("/api/tasks/{$task->id}")
+            ->assertOk()
+            ->assertJsonPath('message', 'Task deleted');
+
+        $this->assertDatabaseMissing('tasks', ['id' => $task->id]);
     }
 }

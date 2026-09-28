@@ -50,28 +50,7 @@ class SendTaskReminders extends Command
                     }
 
                     $completedOn = $user->timezone ? now($user->timezone)->toDateString() : now()->toDateString();
-                    $task->completions()->create([
-                        'user_id' => $user->id,
-                        'completed_on' => $completedOn,
-                    ]);
-
-                    // A repeating reminder is completed today and moves to its next time; one without a frequency is completed once.
-                    $next = $task->nextReminderAfter(CarbonImmutable::now());
-                    if ($next) {
-                        $task->updateQuietly([
-                            'remind_at' => $next,
-                            'reminded_at' => null,
-                            'completed_at' => now(),
-                            'due_date' => $task->nextDueDate(),
-                        ]);
-                    } else {
-                        $task->updateQuietly([
-                            'remind_at' => null,
-                            'reminded_at' => now(),
-                            'done' => true,
-                            'completed_at' => now(),
-                        ]);
-                    }
+                    $task->autoComplete($completedOn);
 
                     $sent++;
                 }

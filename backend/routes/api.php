@@ -76,6 +76,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::apiResource('projects', ProjectController::class)->only(['index', 'store', 'destroy']);
     Route::post('/tasks/import', TaskImportController::class);
     Route::post('/tasks/{task}/complete', [TaskController::class, 'complete']);
+    Route::post('/tasks/{task}/auto-complete', [TaskController::class, 'autoComplete']);
     Route::apiResource('tasks', TaskController::class)->except(['show']);
     Route::get('/reports/tasks', TaskReportController::class);
 

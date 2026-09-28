@@ -9,6 +9,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Support\Facades\DB;
 
 #[Fillable(['user_id', 'project_id', 'title', 'done', 'due_date', 'due_time', 'label', 'repeat', 'client_id', 'completed_at', 'reminder', 'reminder_early', 'reminder_frequency', 'remind_at', 'reminded_at', 'assignee_id'])]
 class Task extends Model
@@ -80,19 +81,20 @@ class Task extends Model
      */
     public function nextReminderAfter(CarbonImmutable $moment): ?CarbonImmutable
     {
-        if (! in_array($this->reminder_frequency, self::REMINDER_FREQUENCIES, true) || $this->due_date === null) {
+        $frequency = $this->repeat !== 'none' ? $this->repeat : $this->reminder_frequency;
+        if (! in_array($frequency, self::REMINDER_FREQUENCIES, true) || $this->due_date === null) {
             return null;
         }
 
         $due = CarbonImmutable::parse($this->due_date);
-        $occurrenceOn = fn (int $count): CarbonImmutable => match ($this->reminder_frequency) {
+        $occurrenceOn = fn (int $count): CarbonImmutable => match ($frequency) {
             'daily' => $due->addDays($count),
             'weekly' => $due->addWeeks($count),
             'monthly' => $due->addMonthsNoOverflow($count),
         };
 
         // Skip straight to roughly now, so a long-running daily reminder doesn't walk every day.
-        $elapsed = (int) match ($this->reminder_frequency) {
+        $elapsed = (int) match ($frequency) {
             'daily' => $due->diffInDays($moment),
             'weekly' => $due->diffInWeeks($moment),
             'monthly' => $due->diffInMonths($moment),
@@ -141,6 +143,61 @@ class Task extends Model
     public function isReminderTask(): bool
     {
         return $this->reminder !== null;
+    }
+
+    /**
+     * Auto-completes a reminder task at its scheduled time.
+     * A repeating reminder is completed today and rolls forward to its next time;
+     * a one-off reminder is marked done.
+     */
+    public function autoComplete(?string $completedOn = null): void
+    {
+        $user = $this->user;
+        $completedOn = $completedOn ?? ($user?->timezone ? now($user->timezone)->toDateString() : now()->toDateString());
+
+        DB::transaction(function () use ($completedOn, $user): void {
+            $this->completions()->create([
+                'user_id' => $user?->id ?? $this->user_id,
+                'completed_on' => $completedOn,
+            ]);
+
+            $next = $this->nextReminderAfter(CarbonImmutable::now());
+            if ($next) {
+                $this->updateQuietly([
+                    'remind_at' => $next,
+                    'reminded_at' => null,
+                    'completed_at' => now(),
+                    'due_date' => $this->nextDueDate(),
+                ]);
+            } else {
+                $this->updateQuietly([
+                    'remind_at' => null,
+                    'reminded_at' => now(),
+                    'done' => true,
+                    'completed_at' => now(),
+                ]);
+            }
+        });
+    }
+
+    /**
+     * Auto-complete all pending reminder tasks for a user whose remind_at time has arrived.
+     */
+    public static function autoCompleteDueRemindersFor(User $user): int
+    {
+        $dueTasks = $user->tasks()
+            ->whereNotNull('reminder')
+            ->whereNotNull('remind_at')
+            ->whereNull('reminded_at')
+            ->where('remind_at', '<=', now())
+            ->where('done', false)
+            ->get();
+
+        foreach ($dueTasks as $task) {
+            $task->autoComplete();
+        }
+
+        return $dueTasks->count();
     }
 
     /**

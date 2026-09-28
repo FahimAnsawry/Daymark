@@ -8,10 +8,13 @@ import {
   ChevronLeft,
   ChevronRight,
   Clock3,
+  CornerDownLeft,
+  FolderInput,
   Inbox,
   Menu,
   PanelLeftClose,
   PanelLeftOpen,
+  Pencil,
   Plus,
   Repeat2,
   Search,
@@ -23,12 +26,14 @@ import {
   UsersRound,
   X,
 } from 'lucide-react'
+import { useQueryClient } from '@tanstack/react-query'
 import {
   DashboardSidebar,
   LINKABLE_VIEWS,
   type DashboardView,
 } from '../components/DashboardSidebar'
 import { ConfirmDeleteDialog } from '../components/ConfirmDeleteDialog'
+import { EditTaskDialog } from '../components/EditTaskDialog'
 import { FocusPanel } from '../components/FocusPanel'
 import { CalendarSettings } from '../components/CalendarSettings'
 import { FocusView } from '../components/FocusView'
@@ -48,6 +53,7 @@ import { reminderLabel, useReminderNotifications, type ReminderSetting } from '.
 import { assignablePeople, takePendingInvite, useProjectMembers } from '../lib/sharing'
 import {
   localDate,
+  taskKeys,
   useCompleteTask,
   useCreateProject,
   useCreateTask,
@@ -97,6 +103,8 @@ const dashboardIconButtonClass =
   'grid size-8 cursor-pointer place-items-center rounded-md border-0 bg-transparent p-[5px] text-[#1f2937] transition-colors duration-150 hover:bg-orange-500/15 hover:text-orange-500 focus-visible:bg-orange-500/15 focus-visible:text-orange-500 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange-500 dark:text-[#f3f4f6] dark:hover:text-orange-400 dark:focus-visible:text-orange-400 dark:focus-visible:outline-orange-400 motion-reduce:transition-none'
 const dashboardPrimaryClass =
   'inline-flex cursor-pointer items-center justify-center gap-[9px] rounded-full border-0 btn-primary px-[15px] py-[9px] text-sm font-medium uppercase tracking-[0.05em] transition-colors duration-150 motion-reduce:transition-none'
+const sortChipClass =
+  'inline-flex h-7 cursor-pointer items-center rounded-full border border-[#d9dee7] bg-transparent px-2.5 text-xs font-medium text-[#475467] transition-colors duration-150 hover:border-[#c2410c] hover:text-[#c2410c] focus-visible:border-[#c2410c] focus-visible:text-[#c2410c] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange-500 dark:border-[#424242] dark:text-[#c9ced6] dark:hover:border-[#fed7aa] dark:hover:text-[#fed7aa] dark:focus-visible:border-[#fed7aa] dark:focus-visible:text-[#fed7aa] dark:focus-visible:outline-[#fed7aa] max-[620px]:hidden motion-reduce:transition-none'
 const dl = (d: string) =>
   new Date(`${d}T12:00:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
 /** Optimistically added tasks have a temporary negative id until the server responds. */
@@ -119,13 +127,18 @@ function DashboardPage() {
       replace: true,
     })
   }, [calendarResult, navigateSearch])
-  const setView = (next: DashboardView) =>
+  const setView = (next: DashboardView) => {
+    // Changing views closes any open sort menu and resets Inbox's "cleared" moment.
+    setSorting(null)
+    setSortedCount(0)
     void navigateSearch({ search: (prev) => ({ ...prev, view: next }), replace: true })
+  }
   const setFilter = (next: string) =>
     void navigateSearch({
       search: (prev) => ({ ...prev, label: next || undefined }),
       replace: true,
     })
+  const queryClient = useQueryClient()
   const { user, isAuthenticated, isLoading } = useAuth()
   const { has } = usePlan()
   const hasPlus = has('plus')
@@ -156,6 +169,7 @@ function DashboardPage() {
     [adding, setAdding] = useState(false),
     [addProject, setAddProject] = useState(false),
     [upgradeOpen, setUpgradeOpen] = useState(false),
+    [editingTask, setEditingTask] = useState<Task | null>(null),
     [draft, setDraft] = useState(''),
     [projectDraft, setProjectDraft] = useState(''),
     [due, setDue] = useState(''),
@@ -172,6 +186,9 @@ function DashboardPage() {
     [focusTask, setFocusTask] = useState<Task | null>(null),
     [shareTarget, setShareTarget] = useState<ProjectRow | null>(null),
     [query, setQuery] = useState(''),
+    [quickDraft, setQuickDraft] = useState(''),
+    [sorting, setSorting] = useState<{ taskId: number; kind: 'date' | 'project' } | null>(null),
+    [sortedCount, setSortedCount] = useState(0),
     [calendarMonth, setCalendarMonth] = useState(() => {
       const next = new Date()
       next.setDate(next.getDate() + 1)
@@ -190,6 +207,8 @@ function DashboardPage() {
   const projectPicker = useRef<HTMLDivElement>(null)
   const datePicker = useRef<HTMLDivElement>(null)
   const taskInput = useRef<HTMLInputElement>(null)
+  const quickAddInput = useRef<HTMLInputElement>(null)
+  const sortMenu = useRef<HTMLDivElement>(null)
   const dialogReturnFocus = useRef<HTMLElement | null>(null)
   useEffect(() => {
     if (!isLoading && !isAuthenticated) void nav({ to: '/login' })
@@ -200,7 +219,11 @@ function DashboardPage() {
     const pendingInvite = takePendingInvite()
     if (pendingInvite) void nav({ to: '/invite/$token', params: { token: pendingInvite } })
   }, [isAuthenticated, nav])
-  useReminderNotifications(tasks, hasPlus)
+  useReminderNotifications(tasks, hasPlus, (task) => {
+    void queryClient.invalidateQueries({ queryKey: taskKeys.tasks })
+    void queryClient.invalidateQueries({ queryKey: taskKeys.reports })
+    toast.success(`Reminder completed: ${task.title}`)
+  })
   const projectRows = projectRowsQuery.data
   const currentProject = view.startsWith('project:')
     ? projectRows?.find((row) => row.name === view.slice(8))
@@ -267,6 +290,24 @@ function DashboardPage() {
     return () => document.removeEventListener('pointerdown', onPointerDown)
   }, [datePickerOpen])
   useEffect(() => {
+    if (!sorting) return
+    const onPointerDown = (event: PointerEvent) => {
+      if (!sortMenu.current?.contains(event.target as Node)) setSorting(null)
+    }
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return
+      event.preventDefault()
+      setSorting(null)
+      sortMenu.current?.querySelector<HTMLButtonElement>('[data-sort-trigger]')?.focus()
+    }
+    document.addEventListener('pointerdown', onPointerDown)
+    document.addEventListener('keydown', onKeyDown)
+    return () => {
+      document.removeEventListener('pointerdown', onPointerDown)
+      document.removeEventListener('keydown', onKeyDown)
+    }
+  }, [sorting])
+  useEffect(() => {
     if (!adding) {
       dialogReturnFocus.current?.focus()
       dialogReturnFocus.current = null
@@ -309,11 +350,11 @@ function DashboardPage() {
   const projectMatches = projects.filter((name) =>
     name.toLowerCase().includes(projectSearch.trim().toLowerCase()),
   )
-  const inboxMatches = 'inbox'.includes(projectSearch.trim().toLowerCase())
+  const noProjectMatches = 'no project'.includes(projectSearch.trim().toLowerCase())
   const canCreateProject =
     !!projectSearch.trim() &&
     !projects.some((name) => name.toLowerCase() === projectSearch.trim().toLowerCase()) &&
-    projectSearch.trim().toLowerCase() !== 'inbox'
+    !['inbox', 'no project'].includes(projectSearch.trim().toLowerCase())
   const heading = view.startsWith('project:')
     ? view.slice(8)
     : (
@@ -354,7 +395,8 @@ function DashboardPage() {
       time,
       repeat,
       ...(reminder &&
-        due && {
+        due &&
+        hasPlus && {
           reminder: reminder.reminder,
           reminder_early: reminder.early,
           reminder_frequency: reminder.frequency,
@@ -434,7 +476,59 @@ function DashboardPage() {
     chooseProject(name)
   }
   const completeTask = (task: Task) => {
+    if (task.reminder) return
     if (isSaved(task)) completeTaskMutation.mutate(task)
+  }
+  const quickAdd = () => {
+    const title = quickDraft.trim()
+    if (!title) return
+    createTaskMutation.mutate({ title, due: '', project: '', label: '', time: '', repeat: 'none' })
+    setQuickDraft('')
+  }
+  /** Gives a task a date or project, which moves it out of Inbox, and offers a way back. */
+  const sortTask = (task: Task, changes: { due: string } | { project: string }) => {
+    const index = visible.findIndex((item) => item.id === task.id)
+    const neighbour = visible[index + 1] ?? visible[index - 1]
+    const message =
+      'project' in changes
+        ? `Moved to ${changes.project}`
+        : changes.due === today()
+          ? 'Moved to Today'
+          : changes.due === moveDate(new Date(), 1)
+            ? 'Moved to Tomorrow'
+            : `Scheduled for ${dl(changes.due)}`
+    updateTaskMutation.mutate({ task, changes })
+    setSorting(null)
+    setSortedCount((count) => count + 1)
+    // Keep keyboard focus in the list instead of losing it with the row that just left.
+    requestAnimationFrame(() => {
+      const next = neighbour
+        ? document.querySelector<HTMLButtonElement>(`[data-task-id="${neighbour.id}"] button`)
+        : null
+      ;(next ?? quickAddInput.current)?.focus()
+    })
+    toast(
+      (shown) => (
+        <span className="flex items-center gap-4 text-sm">
+          <span>{message}</span>
+          <button
+            type="button"
+            className="cursor-pointer rounded-full border-0 bg-transparent px-2 py-1 text-sm font-semibold text-[#c2410c] hover:bg-orange-500/10 focus-visible:outline-2 focus-visible:outline-orange-500"
+            onClick={() => {
+              updateTaskMutation.mutate({
+                task: { ...task, ...changes },
+                changes: 'project' in changes ? { project: '' } : { due: '' },
+              })
+              setSortedCount((count) => Math.max(0, count - 1))
+              toast.dismiss(shown.id)
+            }}
+          >
+            Undo
+          </button>
+        </span>
+      ),
+      { id: `sorted-${task.id}`, duration: 6000 },
+    )
   }
   if (isLoading || isImporting || (canLoad && (tasksQuery.isPending || projectsQuery.isPending)))
     return <LoadingPage />
@@ -447,27 +541,60 @@ function DashboardPage() {
       <div
         className="group flex min-h-14 items-center gap-3 border-b border-[#d9dee7] dark:border-[#383838]"
         key={t.id}
+        data-task-id={t.id}
       >
-        <button
-          className={`grid size-5 shrink-0 cursor-pointer place-items-center rounded-full border ${
-            done
-              ? 'border-[#c2410c] bg-[#c2410c] text-white dark:border-[#fed7aa] dark:bg-[#fed7aa] dark:text-[#1f2937]'
-              : 'border-[#667085] bg-transparent text-white'
-          }`}
-          aria-label={done ? `Uncomplete ${t.title}` : `Complete ${t.title}`}
-          onClick={() => completeTask(t)}
-        >
-          {done && <Check size={13} />}
-        </button>
+        {isReminder ? (
+          <div
+            className={`grid size-5 shrink-0 place-items-center rounded-full border cursor-default ${
+              done
+                ? 'border-[#c2410c] bg-[#c2410c] text-white dark:border-[#fed7aa] dark:bg-[#fed7aa] dark:text-[#1f2937]'
+                : 'border-orange-400 bg-orange-50 text-orange-600 dark:border-orange-500/50 dark:bg-orange-950/40 dark:text-orange-400'
+            }`}
+            title={
+              done
+                ? 'Completed'
+                : `Reminder: ${reminderLabel(t.reminder, t.reminder_frequency, t.reminder_early) || 'Scheduled'}`
+            }
+            aria-label={
+              done
+                ? `Completed reminder: ${t.title}`
+                : `Reminder: ${t.title}`
+            }
+          >
+            {done ? <Check size={13} /> : <Bell size={11} aria-hidden="true" />}
+          </div>
+        ) : (
+          <button
+            className={`grid size-5 shrink-0 cursor-pointer place-items-center rounded-full border ${
+              done
+                ? 'border-[#c2410c] bg-[#c2410c] text-white dark:border-[#fed7aa] dark:bg-[#fed7aa] dark:text-[#1f2937]'
+                : 'border-[#667085] bg-transparent text-white'
+            }`}
+            aria-label={done ? `Uncomplete ${t.title}` : `Complete ${t.title}`}
+            onClick={() => completeTask(t)}
+          >
+            {done && <Check size={13} />}
+          </button>
+        )}
         <div className="grid flex-1 gap-[5px]">
           <div className="flex items-center gap-2">
-            <span
-              className={`text-sm ${done ? 'text-[#667085] line-through dark:text-[#a7b0bf]' : ''}`}
+            <button
+              type="button"
+              className={`text-left border-0 bg-transparent p-0 cursor-pointer text-sm hover:underline ${
+                done
+                  ? 'text-[#667085] line-through dark:text-[#a7b0bf]'
+                  : 'text-[#1f2937] dark:text-[#f3f4f6]'
+              }`}
+              title="Click to edit task"
+              onClick={() => setEditingTask(t)}
             >
               {t.title}
-            </span>
+            </button>
             {isReminder && (
-              <span className="inline-flex items-center gap-1 rounded bg-orange-100 px-1.5 py-0.5 text-[11px] font-medium text-orange-800 dark:bg-orange-950/60 dark:text-orange-300">
+              <span
+                className="inline-flex items-center gap-1 rounded bg-orange-100 px-1.5 py-0.5 text-[11px] font-medium text-orange-800 dark:bg-orange-950/60 dark:text-orange-300"
+                title="Reminder"
+              >
                 <Bell size={10} aria-hidden="true" />
                 <span>Reminder</span>
               </span>
@@ -488,6 +615,85 @@ function DashboardPage() {
               .join(' · ')}
           </small>
         </div>
+        {view === 'inbox' && isSaved(t) && !done && (
+          <div
+            ref={sorting?.taskId === t.id ? sortMenu : undefined}
+            className={`relative flex items-center gap-1 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100 max-[900px]:opacity-100 motion-reduce:transition-none ${
+              sorting?.taskId === t.id ? 'opacity-100' : 'opacity-0'
+            }`}
+          >
+            <button
+              type="button"
+              className={sortChipClass}
+              aria-label={`Move ${t.title} to Today`}
+              onClick={() => sortTask(t, { due: today() })}
+            >
+              Today
+            </button>
+            <button
+              type="button"
+              className={sortChipClass}
+              aria-label={`Move ${t.title} to Tomorrow`}
+              onClick={() => sortTask(t, { due: moveDate(new Date(), 1) })}
+            >
+              Tomorrow
+            </button>
+            <button
+              type="button"
+              className={`${dashboardIconButtonClass} text-[#667085] dark:text-[#a7b0bf]`}
+              aria-label={`Pick a date for ${t.title}`}
+              title="Pick a date"
+              aria-haspopup="dialog"
+              aria-expanded={sorting?.taskId === t.id && sorting.kind === 'date'}
+              data-sort-trigger={
+                sorting?.taskId === t.id && sorting.kind === 'date' ? '' : undefined
+              }
+              onClick={() =>
+                setSorting((current) =>
+                  current?.taskId === t.id && current.kind === 'date'
+                    ? null
+                    : { taskId: t.id, kind: 'date' },
+                )
+              }
+            >
+              <CalendarDays size={16} aria-hidden="true" />
+            </button>
+            <button
+              type="button"
+              className={`${dashboardIconButtonClass} text-[#667085] dark:text-[#a7b0bf]`}
+              aria-label={`Move ${t.title} to a project`}
+              title="Move to project"
+              aria-haspopup="dialog"
+              aria-expanded={sorting?.taskId === t.id && sorting.kind === 'project'}
+              data-sort-trigger={
+                sorting?.taskId === t.id && sorting.kind === 'project' ? '' : undefined
+              }
+              onClick={() =>
+                setSorting((current) =>
+                  current?.taskId === t.id && current.kind === 'project'
+                    ? null
+                    : { taskId: t.id, kind: 'project' },
+                )
+              }
+            >
+              <FolderInput size={16} aria-hidden="true" />
+            </button>
+            {sorting?.taskId === t.id && sorting.kind === 'date' && (
+              <TaskDatePicker
+                due=""
+                placement="right-0"
+                onSelect={(date) => sortTask(t, { due: date })}
+              />
+            )}
+            {sorting?.taskId === t.id && sorting.kind === 'project' && (
+              <SortProjectMenu
+                taskTitle={t.title}
+                projects={projects}
+                onSelect={(name) => sortTask(t, { project: name })}
+              />
+            )}
+          </div>
+        )}
         {isSaved(t) && !done && (
           <div className="flex items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100 max-[900px]:opacity-100 motion-reduce:transition-none">
             {assignees.length > 0 && (
@@ -515,28 +721,35 @@ function DashboardPage() {
                 ))}
               </select>
             )}
-            <ReminderPicker
-              variant="icon"
-              taskTitle={t.title}
-              value={t.reminder ?? null}
-              early={t.reminder_early ?? false}
-              frequency={t.reminder_frequency ?? null}
-              onChange={(next) =>
-                updateTaskMutation.mutate({
-                  task: t,
-                  changes: {
-                    reminder: next?.reminder ?? null,
-                    reminder_early: next?.early ?? false,
-                    reminder_frequency: next?.frequency ?? null,
-                    ...(next && !t.due && { due: today() }),
-                  },
-                })
-              }
-              locked={!hasPlus}
-              onUpgrade={() => setUpgradeOpen(true)}
-              hasDueDate={!!t.due}
-              suggestedTime={t.time}
-            />
+            {isReminder && (
+              <ReminderPicker
+                variant="icon"
+                taskTitle={t.title}
+                value={t.reminder ?? null}
+                early={t.reminder_early ?? false}
+                frequency={t.reminder_frequency ?? null}
+                canRemove={false}
+                onChange={(next) => {
+                  if (!next?.reminder) {
+                    toast.error('Reminders cannot be removed from a reminder task.')
+                    return
+                  }
+                  updateTaskMutation.mutate({
+                    task: t,
+                    changes: {
+                      reminder: next.reminder,
+                      reminder_early: next.early ?? false,
+                      reminder_frequency: next.frequency ?? null,
+                      ...(next && !t.due && { due: today() }),
+                    },
+                  })
+                }}
+                locked={!hasPlus}
+                onUpgrade={() => setUpgradeOpen(true)}
+                hasDueDate={!!t.due}
+                suggestedTime={t.time}
+              />
+            )}
             {!isReminder && (
               <button
                 className={`${dashboardIconButtonClass} relative text-[#667085] dark:text-[#a7b0bf]`}
@@ -551,6 +764,14 @@ function DashboardPage() {
             )}
           </div>
         )}
+        <button
+          className={`${dashboardIconButtonClass} text-[#667085] opacity-0 group-hover:opacity-100 focus-visible:opacity-100 hover:text-orange-600 dark:text-[#a7b0bf] dark:hover:text-orange-400`}
+          aria-label={`Edit ${t.title}`}
+          title={`Edit ${t.title}`}
+          onClick={() => setEditingTask(t)}
+        >
+          <Pencil size={15} />
+        </button>
         <button
           className={`${dashboardIconButtonClass} text-[#667085] opacity-0 group-hover:opacity-100 focus-visible:opacity-100 hover:text-red-600 dark:text-[#a7b0bf] dark:hover:text-red-400`}
           aria-label={`Delete ${t.title}`}
@@ -639,6 +860,11 @@ function DashboardPage() {
             <h1 className="m-0 min-w-0 truncate font-display text-[30px] font-semibold tracking-[-0.03em] max-[900px]:text-[26px]">
               {heading}
             </h1>
+            {view === 'inbox' && visible.length > 0 && (
+              <span className="mr-auto ml-3 shrink-0 pt-1.5 text-sm tabular-nums text-[#667085] max-[900px]:ml-0 dark:text-[#a7b0bf]">
+                {visible.length} to sort
+              </span>
+            )}
             {currentProject && (
               <div className="ml-auto flex items-center gap-1">
                 <button
@@ -695,7 +921,14 @@ function DashboardPage() {
                       ? 'bg-orange-600 text-white dark:bg-orange-500'
                       : 'bg-[#f4f1e9] text-[#667085] hover:bg-[#e9e5da] dark:bg-[#383838] dark:text-[#a7b0bf] dark:hover:bg-[#444]'
                   }`}
+                  aria-label={`Reminder task${hasPlus ? '' : lockedSuffix('plus')}`}
+                  aria-haspopup={hasPlus ? undefined : 'dialog'}
                   onClick={() => {
+                    // Reminders are part of Plus; the API rejects them for free accounts.
+                    if (!hasPlus) {
+                      setUpgradeOpen(true)
+                      return
+                    }
                     setTaskType('reminder')
                     if (!reminder) {
                       setReminder({
@@ -709,6 +942,7 @@ function DashboardPage() {
                 >
                   <Bell size={12} aria-hidden="true" />
                   Reminder task
+                  {!hasPlus && <PlanLock plan="plus" className="ml-0.5" />}
                 </button>
               </div>
               <input
@@ -736,7 +970,7 @@ function DashboardPage() {
                     ref={projectTrigger}
                     type="button"
                     className="flex min-h-[35px] max-w-[160px] cursor-pointer items-center gap-[7px] rounded-lg border border-[#d9dee7] bg-transparent px-[10px] text-sm text-[#1f2937] hover:bg-[#f4f1e9] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange-500 dark:border-[#484848] dark:text-[#f2f2f2] dark:hover:bg-[#383838] dark:focus-visible:outline-[#fed7aa]"
-                    aria-label={`Project: ${project || 'Inbox'}`}
+                    aria-label={`Project: ${project || 'No project'}`}
                     aria-haspopup="listbox"
                     aria-expanded={projectPickerOpen}
                     aria-controls="task-project-options"
@@ -747,7 +981,7 @@ function DashboardPage() {
                     }}
                   >
                     <Inbox size={16} aria-hidden="true" className="shrink-0" />
-                    <span className="truncate">{project || 'Inbox'}</span>
+                    <span className="truncate">{project || 'No project'}</span>
                   </button>
                   {projectPickerOpen && (
                     <div className="absolute left-[-96px] top-[calc(100%+7px)] z-30 w-[calc(100vw-40px)] max-w-[376px] overflow-hidden rounded-xl border border-[#d9dee7] bg-white p-[10px] text-[#1f2937] shadow-[0_16px_36px_#0002] dark:border-[#454545] dark:bg-[#292929] dark:text-[#f2f2f2] dark:shadow-[0_16px_36px_#0007] max-[620px]:left-[-42px]">
@@ -759,7 +993,8 @@ function DashboardPage() {
                         onKeyDown={(event) => {
                           if (event.key !== 'Enter') return
                           event.preventDefault()
-                          if (inboxMatches) chooseProject('')
+                          if (!projectSearch.trim() || (noProjectMatches && !projectMatches.length))
+                            chooseProject('')
                           else if (projectMatches.length) chooseProject(projectMatches[0])
                           else createProjectFromTask()
                         }}
@@ -773,7 +1008,7 @@ function DashboardPage() {
                         aria-label="Projects"
                         className="mt-[10px] max-h-56 overflow-y-auto"
                       >
-                        {inboxMatches && (
+                        {noProjectMatches && (
                           <button
                             type="button"
                             role="option"
@@ -786,7 +1021,7 @@ function DashboardPage() {
                               aria-hidden="true"
                               className="text-[#667085] dark:text-[#d0d0d0]"
                             />
-                            <span className="flex-1">Inbox</span>
+                            <span className="flex-1">No project</span>
                             {!project && <Check size={16} aria-hidden="true" />}
                           </button>
                         )}
@@ -861,20 +1096,22 @@ function DashboardPage() {
                     />
                   )}
                 </div>
-                <ReminderPicker
-                  value={reminder?.reminder ?? null}
-                  early={reminder?.early ?? false}
-                  frequency={reminder?.frequency ?? null}
-                  onChange={(next) => {
-                    if (next && !due) setDue(today())
-                    setReminder(next)
-                    setTaskType(next ? 'reminder' : 'normal')
-                  }}
-                  locked={!hasPlus}
-                  onUpgrade={() => setUpgradeOpen(true)}
-                  hasDueDate={!!due}
-                  suggestedTime={time}
-                />
+                {taskType === 'reminder' && (
+                  <ReminderPicker
+                    value={reminder?.reminder ?? null}
+                    early={reminder?.early ?? false}
+                    frequency={reminder?.frequency ?? null}
+                    onChange={(next) => {
+                      if (next && !due) setDue(today())
+                      setReminder(next)
+                      if (!next) setTaskType('normal')
+                    }}
+                    locked={!hasPlus}
+                    onUpgrade={() => setUpgradeOpen(true)}
+                    hasDueDate={!!due}
+                    suggestedTime={time}
+                  />
+                )}
                 <div className="ml-auto flex items-center gap-2">
                   <button
                     type="button"
@@ -894,11 +1131,6 @@ function DashboardPage() {
                   </button>
                 </div>
               </div>
-              {taskType === 'reminder' && (
-                <p className="mb-0 mt-2.5 text-[12px] text-[#667085] dark:text-[#a7b0bf]">
-                  Reminder tasks complete when reminded and cannot be used in focus sessions.
-                </p>
-              )}
               {labelOpen && (
                 <label className="mt-3 flex items-center gap-2 border-t border-[#d9dee7] pt-3 text-sm text-[#475467] dark:border-[#424242] dark:text-[#ccc]">
                   <SlidersHorizontal size={16} aria-hidden="true" /> Label
@@ -1008,6 +1240,7 @@ function DashboardPage() {
                   }}
                   onComplete={completeTask}
                   onDelete={(task) => setDeleteTarget({ type: 'task', task })}
+                  onEdit={(task) => setEditingTask(task)}
                 />
               ) : view === 'today' ? (
                 visible.length ? (
@@ -1037,6 +1270,52 @@ function DashboardPage() {
                 ) : adding ? null : (
                   <Empty view={view} onAdd={open} />
                 )
+              ) : view === 'inbox' ? (
+                <>
+                  <form
+                    aria-label="Add to Inbox"
+                    className="flex min-h-14 items-center gap-3 border-y border-[#d9dee7] transition-shadow duration-150 focus-within:shadow-[inset_0_-2px_0_#c2410c] dark:border-[#383838] dark:focus-within:shadow-[inset_0_-2px_0_#fdba74] motion-reduce:transition-none"
+                    onSubmit={(event) => {
+                      event.preventDefault()
+                      quickAdd()
+                    }}
+                  >
+                    <Plus
+                      size={20}
+                      aria-hidden="true"
+                      className="shrink-0 text-[#c2410c] dark:text-[#fdba74]"
+                    />
+                    <input
+                      ref={quickAddInput}
+                      className="min-w-0 flex-1 border-0 bg-transparent py-3 text-[15px] text-[#1f2937] outline-none placeholder:text-[#667085] dark:text-[#f3f4f6] dark:placeholder:text-[#a7b0bf]"
+                      value={quickDraft}
+                      onChange={(event) => setQuickDraft(event.target.value)}
+                      onKeyDown={(event) => {
+                        if (event.key === 'Escape' && quickDraft) {
+                          event.preventDefault()
+                          setQuickDraft('')
+                        }
+                      }}
+                      placeholder="What’s on your mind?"
+                      aria-label="Add a task to Inbox"
+                      maxLength={255}
+                    />
+                    {quickDraft.trim() && (
+                      <button
+                        type="submit"
+                        className="inline-flex h-7 shrink-0 cursor-pointer items-center gap-1.5 rounded-full border-0 bg-transparent px-2.5 text-xs font-medium text-[#475467] hover:bg-[#f4f1e9] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange-500 dark:text-[#c9ced6] dark:hover:bg-[#383838] dark:focus-visible:outline-[#fed7aa]"
+                      >
+                        <CornerDownLeft size={14} aria-hidden="true" />
+                        Add
+                      </button>
+                    )}
+                  </form>
+                  {visible.length ? (
+                    <div>{visible.map(renderTaskRow)}</div>
+                  ) : (
+                    !adding && <Empty view={view} cleared={sortedCount > 0} />
+                  )}
+                </>
               ) : visible.length ? (
                 <div className="border-t border-[#d9dee7] dark:border-[#383838]">
                   {visible.map(renderTaskRow)}
@@ -1112,23 +1391,40 @@ function DashboardPage() {
         onClose={() => setDeleteTarget(null)}
         onConfirm={confirmDelete}
       />
+      <EditTaskDialog
+        task={editingTask}
+        isOpen={Boolean(editingTask)}
+        onClose={() => setEditingTask(null)}
+        onSave={(changes) => {
+          if (editingTask) {
+            updateTaskMutation.mutate({ task: editingTask, changes })
+          }
+        }}
+        onDelete={(task) => setDeleteTarget({ type: 'task', task })}
+        projects={projects}
+        hasPlus={hasPlus}
+        onUpgrade={() => setUpgradeOpen(true)}
+      />
     </div>
   )
 }
+/** Without `onTimeChange` and `onRepeatChange` it is a plain date picker (used to sort Inbox). */
 function TaskDatePicker({
   due,
-  time,
-  repeat,
+  time = '',
+  repeat = 'none',
   onSelect,
   onTimeChange,
   onRepeatChange,
+  placement = 'left-0 max-[620px]:left-[-145px]',
 }: {
   due: string
-  time: string
-  repeat: NonNullable<Task['repeat']>
+  time?: string
+  repeat?: NonNullable<Task['repeat']>
   onSelect: (date: string) => void
-  onTimeChange: (time: string) => void
-  onRepeatChange: (repeat: NonNullable<Task['repeat']>) => void
+  onTimeChange?: (time: string) => void
+  onRepeatChange?: (repeat: NonNullable<Task['repeat']>) => void
+  placement?: string
 }) {
   const [search, setSearch] = useState('')
   const [invalid, setInvalid] = useState(false)
@@ -1182,7 +1478,7 @@ function TaskDatePicker({
     <div
       role="dialog"
       aria-label="Choose a date"
-      className="absolute left-0 top-[calc(100%+7px)] z-30 flex max-h-[min(660px,calc(100vh-270px))] w-[min(312px,calc(100vw-40px))] flex-col overflow-y-auto rounded-xl border border-[#d9dee7] bg-white text-[#1f2937] shadow-[0_16px_36px_#0002] dark:border-[#454545] dark:bg-[#292929] dark:text-[#f2f2f2] dark:shadow-[0_16px_36px_#0007] max-[620px]:left-[-145px]"
+      className={`absolute top-[calc(100%+7px)] z-30 flex max-h-[min(660px,calc(100vh-270px))] w-[min(312px,calc(100vw-40px))] flex-col overflow-y-auto rounded-xl border border-[#d9dee7] bg-white text-[#1f2937] shadow-[0_16px_36px_#0002] dark:border-[#454545] dark:bg-[#292929] dark:text-[#f2f2f2] dark:shadow-[0_16px_36px_#0007] ${placement}`}
     >
       <div className="border-b border-[#d9dee7] p-3 dark:border-[#424242]">
         <input
@@ -1269,48 +1565,52 @@ function TaskDatePicker({
           compact
         />
       </div>
-      <div className="grid gap-2 border-t border-[#d9dee7] p-3 dark:border-[#424242]">
-        <button
-          type="button"
-          className="flex min-h-10 cursor-pointer items-center justify-center gap-2 rounded-lg border border-[#d9dee7] bg-transparent text-sm font-semibold text-[#475467] hover:bg-[#f4f1e9] dark:border-[#454545] dark:text-[#dedede] dark:hover:bg-[#383838]"
-          aria-expanded={showTime}
-          onClick={() => setShowTime((open) => !open)}
-        >
-          <Clock3 size={16} />
-          {time || 'Time'}
-        </button>
-        {showTime && (
-          <input
-            type="time"
-            className="min-h-10 rounded-lg border border-[#d9dee7] bg-white px-3 text-[#1f2937] scheme-light dark:border-[#555] dark:bg-[#292929] dark:text-[#f2f2f2] dark:scheme-dark"
-            aria-label="Task time"
-            value={time}
-            onChange={(event) => onTimeChange(event.target.value)}
-          />
-        )}
-        <button
-          type="button"
-          className="flex min-h-10 cursor-pointer items-center justify-center gap-2 rounded-lg border border-[#d9dee7] bg-transparent text-sm font-semibold text-[#475467] hover:bg-[#f4f1e9] dark:border-[#454545] dark:text-[#dedede] dark:hover:bg-[#383838]"
-          aria-expanded={showRepeat}
-          onClick={() => setShowRepeat((open) => !open)}
-        >
-          <Repeat2 size={16} />
-          {repeat === 'none' ? 'Repeat' : `Repeat ${repeat}`}
-        </button>
-        {showRepeat && (
-          <select
-            className="min-h-10 rounded-lg border border-[#d9dee7] bg-white px-3 text-[#1f2937] scheme-light dark:border-[#555] dark:bg-[#292929] dark:text-[#f2f2f2] dark:scheme-dark"
-            aria-label="Repeat task"
-            value={repeat}
-            onChange={(event) => onRepeatChange(event.target.value as NonNullable<Task['repeat']>)}
+      {onTimeChange && onRepeatChange && (
+        <div className="grid gap-2 border-t border-[#d9dee7] p-3 dark:border-[#424242]">
+          <button
+            type="button"
+            className="flex min-h-10 cursor-pointer items-center justify-center gap-2 rounded-lg border border-[#d9dee7] bg-transparent text-sm font-semibold text-[#475467] hover:bg-[#f4f1e9] dark:border-[#454545] dark:text-[#dedede] dark:hover:bg-[#383838]"
+            aria-expanded={showTime}
+            onClick={() => setShowTime((open) => !open)}
           >
-            <option value="none">No repeat</option>
-            <option value="daily">Daily</option>
-            <option value="weekly">Weekly</option>
-            <option value="monthly">Monthly</option>
-          </select>
-        )}
-      </div>
+            <Clock3 size={16} />
+            {time || 'Time'}
+          </button>
+          {showTime && (
+            <input
+              type="time"
+              className="min-h-10 rounded-lg border border-[#d9dee7] bg-white px-3 text-[#1f2937] scheme-light dark:border-[#555] dark:bg-[#292929] dark:text-[#f2f2f2] dark:scheme-dark"
+              aria-label="Task time"
+              value={time}
+              onChange={(event) => onTimeChange(event.target.value)}
+            />
+          )}
+          <button
+            type="button"
+            className="flex min-h-10 cursor-pointer items-center justify-center gap-2 rounded-lg border border-[#d9dee7] bg-transparent text-sm font-semibold text-[#475467] hover:bg-[#f4f1e9] dark:border-[#454545] dark:text-[#dedede] dark:hover:bg-[#383838]"
+            aria-expanded={showRepeat}
+            onClick={() => setShowRepeat((open) => !open)}
+          >
+            <Repeat2 size={16} />
+            {repeat === 'none' ? 'Repeat' : `Repeat ${repeat}`}
+          </button>
+          {showRepeat && (
+            <select
+              className="min-h-10 rounded-lg border border-[#d9dee7] bg-white px-3 text-[#1f2937] scheme-light dark:border-[#555] dark:bg-[#292929] dark:text-[#f2f2f2] dark:scheme-dark"
+              aria-label="Repeat task"
+              value={repeat}
+              onChange={(event) =>
+                onRepeatChange(event.target.value as NonNullable<Task['repeat']>)
+              }
+            >
+              <option value="none">No repeat</option>
+              <option value="daily">Daily</option>
+              <option value="weekly">Weekly</option>
+              <option value="monthly">Monthly</option>
+            </select>
+          )}
+        </div>
+      )}
     </div>
   )
 }
@@ -1367,22 +1667,35 @@ function TaskDateMonth({
     </div>
   )
 }
-function Empty({ view, onAdd }: { view: DashboardView; onAdd: () => void }) {
+/** Inbox has its own quick-add row, so its empty state has no button (`onAdd` is omitted). */
+function Empty({
+  view,
+  onAdd,
+  cleared = false,
+}: {
+  view: DashboardView
+  onAdd?: () => void
+  cleared?: boolean
+}) {
   const c =
-    view === 'inbox'
-      ? [
-          'Capture now, plan later',
-          'Inbox is your go-to spot for quick task entry. Clear your mind now, organize when you’re ready.',
-        ]
-      : view === 'today'
-        ? ['A clear day ahead', 'Tasks scheduled for today will appear here.']
-        : view === 'upcoming'
-          ? ['Nothing on the horizon', 'Give a task a date to see it here.']
-          : view === 'notifications'
-            ? ['All caught up', 'You have no notifications right now.']
-            : ['Keep things easy to find', 'Add a task to this view to get started.']
+    view === 'inbox' && cleared
+      ? ['Everything has a place', 'Your inbox is clear. New thoughts will land here.']
+      : view === 'inbox'
+        ? [
+            'Capture now, plan later',
+            'Inbox is your go-to spot for quick task entry. Clear your mind now, organize when you’re ready.',
+          ]
+        : view === 'today'
+          ? ['A clear day ahead', 'Tasks scheduled for today will appear here.']
+          : view === 'upcoming'
+            ? ['Nothing on the horizon', 'Give a task a date to see it here.']
+            : view === 'notifications'
+              ? ['All caught up', 'You have no notifications right now.']
+              : ['Keep things easy to find', 'Add a task to this view to get started.']
   return (
-    <div className="mx-auto mt-[18vh] max-w-[360px] text-center max-[900px]:mt-[12vh]">
+    <div
+      className={`mx-auto max-w-[360px] text-center ${view === 'inbox' ? 'mt-[10vh]' : 'mt-[18vh] max-[900px]:mt-[12vh]'}`}
+    >
       <div className="relative mb-[14px] grid h-[150px] place-items-center text-[#fed7aa] max-[900px]:h-[132px]">
         {view === 'inbox' ? (
           <img
@@ -1408,11 +1721,78 @@ function Empty({ view, onAdd }: { view: DashboardView; onAdd: () => void }) {
       <p className="mx-auto mb-[18px] max-w-[300px] text-[15px] leading-[1.5] text-[#667085] dark:text-[#a7b0bf]">
         {c[1]}
       </p>
-      {view !== 'notifications' && (
+      {onAdd && view !== 'notifications' && (
         <button className={dashboardPrimaryClass} onClick={onAdd}>
           <Plus size={20} /> Add task
         </button>
       )}
+    </div>
+  )
+}
+function SortProjectMenu({
+  taskTitle,
+  projects,
+  onSelect,
+}: {
+  taskTitle: string
+  projects: string[]
+  onSelect: (name: string) => void
+}) {
+  const [search, setSearch] = useState('')
+  const query = search.trim()
+  const matches = projects.filter((name) => name.toLowerCase().includes(query.toLowerCase()))
+  const canCreate =
+    !!query &&
+    !projects.some((name) => name.toLowerCase() === query.toLowerCase()) &&
+    !['inbox', 'no project'].includes(query.toLowerCase())
+  const optionClass =
+    'flex min-h-10 w-full cursor-pointer items-center gap-3 rounded-lg border-0 bg-transparent px-3 text-left text-sm text-[#1f2937] hover:bg-[#f4f1e9] focus-visible:bg-[#f4f1e9] focus-visible:outline-2 focus-visible:outline-orange-500 dark:text-[#f2f2f2] dark:hover:bg-[#393939] dark:focus-visible:bg-[#393939] dark:focus-visible:outline-[#fed7aa]'
+  return (
+    <div
+      role="dialog"
+      aria-label={`Move ${taskTitle} to a project`}
+      className="absolute right-0 top-[calc(100%+7px)] z-30 w-[min(280px,calc(100vw-40px))] rounded-xl border border-[#d9dee7] bg-white p-[10px] text-[#1f2937] shadow-[0_16px_36px_#0002] dark:border-[#454545] dark:bg-[#292929] dark:text-[#f2f2f2] dark:shadow-[0_16px_36px_#0007]"
+    >
+      <input
+        autoFocus
+        className="box-border h-10 w-full rounded-lg border border-[#d9dee7] bg-transparent px-3 text-[15px] text-[#1f2937] outline-none placeholder:text-[#667085] focus:border-orange-500 dark:border-[#5d5d5d] dark:text-[#f2f2f2] dark:placeholder:text-[#aaa] dark:focus:border-[#a5a5a5]"
+        value={search}
+        onChange={(event) => setSearch(event.target.value)}
+        onKeyDown={(event) => {
+          if (event.key !== 'Enter') return
+          event.preventDefault()
+          if (matches.length && query) onSelect(matches[0])
+          else if (canCreate) onSelect(query)
+        }}
+        placeholder={projects.length ? 'Find or create a project' : 'Name a new project'}
+        aria-label="Find or create a project"
+        maxLength={255}
+      />
+      <div className="mt-[10px] max-h-56 overflow-y-auto">
+        {matches.map((name) => (
+          <button key={name} type="button" className={optionClass} onClick={() => onSelect(name)}>
+            <FolderInput
+              size={18}
+              aria-hidden="true"
+              className="shrink-0 text-[#667085] dark:text-[#d0d0d0]"
+            />
+            <span className="min-w-0 flex-1 truncate">{name}</span>
+          </button>
+        ))}
+        {canCreate && (
+          <button type="button" className={optionClass} onClick={() => onSelect(query)}>
+            <Plus size={18} aria-hidden="true" className="shrink-0" />
+            <span className="min-w-0 flex-1 truncate">Create “{query}”</span>
+          </button>
+        )}
+        {!matches.length && !canCreate && (
+          <p className="m-0 px-3 py-2 text-sm text-[#667085] dark:text-[#a7b0bf]">
+            {projects.length
+              ? 'No matching projects.'
+              : 'No projects yet. Type a name to start one.'}
+          </p>
+        )}
+      </div>
     </div>
   )
 }
@@ -1426,6 +1806,7 @@ function UpcomingCalendarFocus({
   onAdd,
   onComplete,
   onDelete,
+  onEdit,
 }: {
   tasks: Task[]
   month: Date
@@ -1436,6 +1817,7 @@ function UpcomingCalendarFocus({
   onAdd: (date: string) => void
   onComplete: (task: Task) => void
   onDelete: (task: Task) => void
+  onEdit: (task: Task) => void
 }) {
   const tomorrow = moveDate(new Date(), 1)
   const firstWeekday = (month.getDay() + 6) % 7
@@ -1561,7 +1943,13 @@ function UpcomingCalendarFocus({
         <div className="grid gap-2">
           {selectedTasks.length ? (
             selectedTasks.map((task) => (
-              <UpcomingTask key={task.id} task={task} onComplete={onComplete} onDelete={onDelete} />
+              <UpcomingTask
+                key={task.id}
+                task={task}
+                onComplete={onComplete}
+                onDelete={onDelete}
+                onEdit={onEdit}
+              />
             ))
           ) : (
             <p className="m-0 rounded-lg bg-[#f7f6f2] px-3 py-4 text-sm leading-6 text-[#59645e] dark:bg-[#313131] dark:text-[#b6c0b8]">
@@ -1622,40 +2010,67 @@ function UpcomingTask({
   task,
   onComplete,
   onDelete,
+  onEdit,
 }: {
   task: Task
   onComplete: (task: Task) => void
   onDelete: (task: Task) => void
+  onEdit: (task: Task) => void
 }) {
   const details = [
     task.time,
     task.project,
     task.label,
     task.repeat && task.repeat !== 'none' && `Repeats ${task.repeat}`,
+    task.reminder &&
+      `Reminder: ${reminderLabel(task.reminder, task.reminder_frequency, task.reminder_early).toLowerCase()}`,
   ].filter(Boolean)
   return (
     <div className="group flex min-w-0 items-start gap-3 rounded-lg bg-[#f7f6f2] p-3 dark:bg-[#313131]">
-      <button
-        className="mt-0.5 grid size-5 shrink-0 cursor-pointer place-items-center rounded-full border border-[#727b73] bg-transparent text-white hover:border-orange-600 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange-500 dark:border-[#b6c0b8] dark:hover:border-orange-400 dark:focus-visible:outline-orange-400"
-        aria-label={`Complete ${task.title}`}
-        onClick={() => onComplete(task)}
-      >
-        <Check
-          size={13}
-          className="opacity-0 group-hover:opacity-50 group-focus-within:opacity-50"
-          aria-hidden="true"
-        />
-      </button>
+      {task.reminder ? (
+        <div
+          className="mt-0.5 grid size-5 shrink-0 place-items-center rounded-full border border-orange-400 bg-orange-50 text-orange-600 dark:border-orange-500/50 dark:bg-orange-950/40 dark:text-orange-400 cursor-default"
+          title="Reminder"
+          aria-label={`Reminder: ${task.title}`}
+        >
+          <Bell size={11} aria-hidden="true" />
+        </div>
+      ) : (
+        <button
+          className="mt-0.5 grid size-5 shrink-0 cursor-pointer place-items-center rounded-full border border-[#727b73] bg-transparent text-white hover:border-orange-600 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange-500 dark:border-[#b6c0b8] dark:hover:border-orange-400 dark:focus-visible:outline-orange-400"
+          aria-label={`Complete ${task.title}`}
+          onClick={() => onComplete(task)}
+        >
+          <Check
+            size={13}
+            className="opacity-0 group-hover:opacity-50 group-focus-within:opacity-50"
+            aria-hidden="true"
+          />
+        </button>
+      )}
       <div className="min-w-0 flex-1">
-        <p className="m-0 break-words text-sm font-medium leading-5 text-[#27352f] dark:text-[#f3f4f6]">
+        <button
+          type="button"
+          className="m-0 break-words text-left text-sm font-medium leading-5 text-[#27352f] dark:text-[#f3f4f6] border-0 bg-transparent p-0 cursor-pointer hover:underline"
+          title="Click to edit task"
+          onClick={() => onEdit(task)}
+        >
           {task.title}
-        </p>
+        </button>
         {details.length > 0 && (
           <p className="mb-0 mt-1 text-xs leading-5 text-[#59645e] dark:text-[#b6c0b8]">
             {details.join(' · ')}
           </p>
         )}
       </div>
+      <button
+        className="grid size-7 shrink-0 cursor-pointer place-items-center rounded-md border-0 bg-transparent text-[#59645e] hover:bg-[#fff3e5] hover:text-orange-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange-500 dark:text-[#b6c0b8] dark:hover:bg-orange-400/15 dark:hover:text-orange-300 dark:focus-visible:outline-orange-400"
+        aria-label={`Edit ${task.title}`}
+        title={`Edit ${task.title}`}
+        onClick={() => onEdit(task)}
+      >
+        <Pencil size={15} aria-hidden="true" />
+      </button>
       <button
         className="grid size-7 shrink-0 cursor-pointer place-items-center rounded-md border-0 bg-transparent text-[#59645e] hover:bg-[#fff3e5] hover:text-orange-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange-500 dark:text-[#b6c0b8] dark:hover:bg-orange-400/15 dark:hover:text-orange-300 dark:focus-visible:outline-orange-400"
         aria-label={`Delete ${task.title}`}

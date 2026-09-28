@@ -21,7 +21,10 @@ class TaskController extends Controller
 {
     public function index(Request $request): AnonymousResourceCollection
     {
-        $tasks = $request->user()->visibleTasks()->with(['project', 'assignee'])->orderBy('id')->get();
+        $user = $request->user();
+        Task::autoCompleteDueRemindersFor($user);
+
+        $tasks = $user->visibleTasks()->with(['project', 'assignee'])->orderBy('id')->get();
 
         return TaskResource::collection($tasks);
     }
@@ -42,6 +45,13 @@ class TaskController extends Controller
     public function update(UpdateTaskRequest $request, Task $task): TaskResource|JsonResponse
     {
         Gate::authorize('update', $task);
+
+        if ($task->isReminderTask() && array_key_exists('reminder', $request->validated()) && $request->validated('reminder') === null) {
+            return response()->json([
+                'message' => 'Reminders cannot be removed from a reminder task.',
+                'errors' => ['reminder' => ['Reminders cannot be removed from a reminder task.']],
+            ], 422);
+        }
 
         if (self::wantsReminderWithoutPlus($request->validated(), $request->user())) {
             return EnsureUserHasPlan::upgradeRequired(Plan::Plus);
@@ -81,10 +91,18 @@ class TaskController extends Controller
     /**
      * Complete or reopen a task. A repeating task with a due date rolls forward instead
      * of being marked done. Every completion is logged for reporting.
+     * Reminder tasks cannot be manually completed; they auto-complete at their scheduled time.
      */
-    public function complete(CompleteTaskRequest $request, Task $task): TaskResource
+    public function complete(CompleteTaskRequest $request, Task $task): TaskResource|JsonResponse
     {
         Gate::authorize('update', $task);
+
+        if ($task->isReminderTask()) {
+            return response()->json([
+                'message' => 'Reminder tasks cannot be manually completed. They are automatically completed at their scheduled time.',
+                'errors' => ['task' => ['Reminder tasks cannot be manually completed. They are automatically completed at their scheduled time.']],
+            ], 422);
+        }
 
         $completedOn = $request->validated('completed_on');
         // Completions count for whoever did the task, which in a shared project may not be its creator.
@@ -122,6 +140,26 @@ class TaskController extends Controller
         });
 
         return new TaskResource($task->load(['project', 'assignee']));
+    }
+
+    /**
+     * Auto-complete a reminder task when its scheduled time arrives.
+     */
+    public function autoComplete(Request $request, Task $task): TaskResource|JsonResponse
+    {
+        Gate::authorize('update', $task);
+
+        if (! $task->isReminderTask()) {
+            return response()->json([
+                'message' => 'Only reminder tasks can be auto-completed.',
+                'errors' => ['task' => ['Only reminder tasks can be auto-completed.']],
+            ], 422);
+        }
+
+        $completedOn = $request->input('completed_on');
+        $task->autoComplete($completedOn);
+
+        return new TaskResource($task->fresh()->load(['project', 'assignee']));
     }
 
     public function destroy(Task $task): JsonResponse
