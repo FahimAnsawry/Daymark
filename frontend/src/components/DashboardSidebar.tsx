@@ -1,9 +1,12 @@
 import { Link } from '@tanstack/react-router'
 import {
+  Bell,
   CalendarDays,
+  CalendarSync,
   ChartNoAxesCombined,
   ChevronDown,
   CircleHelp,
+  CreditCard,
   Folder,
   Inbox,
   LayoutGrid,
@@ -12,12 +15,16 @@ import {
   Search,
   Settings,
   Sparkles,
+  Timer,
   Trash2,
   UsersRound,
   X,
 } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
-import { useAuth } from '../lib/auth-context'
+import { useAuth, usePlan } from '../lib/auth-context'
+import { useBilling, useCancelTrial } from '../lib/billing'
+import { lockedSuffix, type PlanId } from '../lib/plans'
+import { PlanLock } from './PlanLock'
 import { ThemeToggle } from './ThemeToggle'
 
 export type DashboardView =
@@ -26,6 +33,10 @@ export type DashboardView =
   | 'upcoming'
   | 'filters'
   | 'reporting'
+  | 'focus'
+  | 'shared'
+  | 'reminders'
+  | 'calendar'
   | 'search'
   | 'help'
   | 'notifications'
@@ -38,6 +49,10 @@ export const LINKABLE_VIEWS = [
   'upcoming',
   'filters',
   'reporting',
+  'focus',
+  'shared',
+  'reminders',
+  'calendar',
   'help',
 ] as const satisfies readonly DashboardView[]
 export type LinkableView = (typeof LINKABLE_VIEWS)[number]
@@ -45,6 +60,10 @@ type Props = {
   view: DashboardView
   onViewChange: (v: DashboardView) => void
   projects: string[]
+  /** Projects shared with others, or shared with the user (Pro). */
+  sharedProjects: ReadonlySet<string>
+  /** Projects the user owns; only these can be deleted. */
+  ownedProjects: ReadonlySet<string>
   projectsWithTasks: ReadonlySet<string>
   onAddTask: () => void
   onAddProject: () => void
@@ -54,14 +73,19 @@ type Props = {
   onCloseMobile: () => void
   isCollapsed: boolean
 }
-const items = [
-  ['search', 'Search', Search],
-  ['inbox', 'Inbox', Inbox],
-  ['today', 'Today', CalendarDays],
-  ['upcoming', 'Upcoming', CalendarDays],
-  ['filters', 'Filters & Labels', LayoutGrid],
-  ['reporting', 'Reporting', ChartNoAxesCombined],
-] as const
+/** Sidebar views; the last value is the plan a view needs, shown as a lock when missing. */
+const items: readonly [DashboardView, string, typeof Search, PlanId | null][] = [
+  ['search', 'Search', Search, null],
+  ['inbox', 'Inbox', Inbox, null],
+  ['today', 'Today', CalendarDays, null],
+  ['upcoming', 'Upcoming', CalendarDays, null],
+  ['filters', 'Filters & Labels', LayoutGrid, null],
+  ['reporting', 'Reporting', ChartNoAxesCombined, null],
+  ['focus', 'Focus sessions', Timer, 'plus'],
+  ['shared', 'Shared projects', UsersRound, 'pro'],
+  ['reminders', 'Reminders', Bell, 'plus'],
+  ['calendar', 'Calendar', CalendarSync, 'pro'],
+]
 
 const sidebarIconButtonClass =
   'grid h-8 w-8 cursor-pointer place-items-center rounded-md border-0 bg-transparent p-[5px] text-[#667085] transition-colors duration-150 hover:bg-black/[0.08] hover:text-[#1f2937] focus-visible:bg-black/[0.08] focus-visible:text-[#1f2937] focus-visible:outline-none dark:text-[#a7b0bf] dark:hover:bg-[#333333] dark:hover:text-[#f3f4f6] dark:focus-visible:bg-[#333333] dark:focus-visible:text-[#f3f4f6] motion-reduce:transition-none'
@@ -72,6 +96,15 @@ const sidebarMenuItemClass =
 
 export function DashboardSidebar(p: Props) {
   const { user, logout } = useAuth()
+  const { has } = usePlan()
+  const billing = useBilling()
+  const cancelTrial = useCancelTrial()
+  const isTrial = Boolean(
+    billing.data?.on_trial ||
+    (user?.plan &&
+      user.plan !== 'free' &&
+      (billing.data?.status === 'trialing' || billing.data?.status === 'canceled')),
+  )
   const [accountMenuOpen, setAccountMenuOpen] = useState(false)
   const accountMenuRef = useRef<HTMLDivElement>(null)
   const go = (v: DashboardView) => {
@@ -151,18 +184,47 @@ export function DashboardSidebar(p: Props) {
                 >
                   <UsersRound size={17} /> Add a team
                 </button>
-                <button
-                  className={`${sidebarMenuItemClass} text-orange-600 dark:text-orange-400`}
-                  role="menuitem"
-                  aria-haspopup="dialog"
-                  onClick={() => {
-                    setAccountMenuOpen(false)
-                    p.onCloseMobile()
-                    p.onTryPro()
-                  }}
-                >
-                  <Sparkles size={17} /> Try Pro for free
-                </button>
+                {user?.plan && user.plan !== 'free' ? (
+                  <>
+                    <Link
+                      to="/settings/billing"
+                      className={sidebarMenuItemClass}
+                      role="menuitem"
+                      onClick={() => {
+                        setAccountMenuOpen(false)
+                        p.onCloseMobile()
+                      }}
+                    >
+                      <CreditCard size={17} /> Billing
+                    </Link>
+                    {isTrial && (
+                      <button
+                        className={`${sidebarMenuItemClass} text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-950/30`}
+                        role="menuitem"
+                        disabled={cancelTrial.isPending}
+                        onClick={() => {
+                          cancelTrial.mutate()
+                          setAccountMenuOpen(false)
+                        }}
+                      >
+                        <X size={17} /> Cancel free trial (temporary)
+                      </button>
+                    )}
+                  </>
+                ) : (
+                  <button
+                    className={`${sidebarMenuItemClass} text-orange-600 dark:text-orange-400`}
+                    role="menuitem"
+                    aria-haspopup="dialog"
+                    onClick={() => {
+                      setAccountMenuOpen(false)
+                      p.onCloseMobile()
+                      p.onTryPro()
+                    }}
+                  >
+                    <Sparkles size={17} /> Try Pro for free
+                  </button>
+                )}
               </div>
             )}
           </div>
@@ -189,22 +251,33 @@ export function DashboardSidebar(p: Props) {
           {!p.isCollapsed && 'Add task'}
         </button>
         <nav className="grid gap-px" aria-label="Workspace">
-          {items.map(([id, label, Icon]) => (
-            <button
-              key={id}
-              className={`${sidebarNavItemClass} ${
-                p.view === id
-                  ? 'bg-orange-500/15 font-semibold text-orange-600 dark:bg-[#333333] dark:text-orange-400'
-                  : ''
-              }`}
-              aria-current={p.view === id ? 'page' : undefined}
-              aria-label={p.isCollapsed ? label : undefined}
-              onClick={() => go(id)}
-            >
-              <Icon size={19} strokeWidth={1.7} />
-              {!p.isCollapsed && <span>{label}</span>}
-            </button>
-          ))}
+          {items.map(([id, label, Icon, plan]) => {
+            const locked = plan !== null && !has(plan)
+            return (
+              <button
+                key={id}
+                className={`${sidebarNavItemClass} ${
+                  p.view === id
+                    ? 'bg-orange-500/15 font-semibold text-orange-600 dark:bg-[#333333] dark:text-orange-400'
+                    : ''
+                }`}
+                aria-current={p.view === id ? 'page' : undefined}
+                aria-label={
+                  p.isCollapsed || locked
+                    ? `${label}${plan && locked ? lockedSuffix(plan) : ''}`
+                    : undefined
+                }
+                onClick={() => go(id)}
+              >
+                <span className="relative grid shrink-0 place-items-center">
+                  <Icon size={19} strokeWidth={1.7} />
+                  {plan && locked && p.isCollapsed && <PlanLock plan={plan} variant="dot" />}
+                </span>
+                {!p.isCollapsed && <span className="min-w-0 flex-1 truncate">{label}</span>}
+                {plan && locked && !p.isCollapsed && <PlanLock plan={plan} />}
+              </button>
+            )
+          })}
         </nav>
         <div className="mt-[25px]">
           {!p.isCollapsed && (
@@ -220,11 +293,9 @@ export function DashboardSidebar(p: Props) {
             </div>
           )}
           {p.projects.map((x) => (
-            <div key={x} className="relative">
+            <div key={x} className="group/project relative">
               <button
-                className={`${sidebarNavItemClass} min-w-0 ${
-                  !p.isCollapsed && !p.projectsWithTasks.has(x) ? 'pr-10' : ''
-                } ${
+                className={`${sidebarNavItemClass} min-w-0 ${!p.isCollapsed ? 'pr-10' : ''} ${
                   p.view === `project:${x}`
                     ? 'bg-orange-500/15 font-semibold text-orange-600 dark:bg-[#333333] dark:text-orange-400'
                     : ''
@@ -232,15 +303,23 @@ export function DashboardSidebar(p: Props) {
                 aria-current={p.view === `project:${x}` ? 'page' : undefined}
                 onClick={() => go(`project:${x}`)}
               >
-                <Folder size={19} strokeWidth={1.7} className="shrink-0" aria-hidden="true" />
+                {p.sharedProjects.has(x) ? (
+                  <UsersRound size={19} strokeWidth={1.7} className="shrink-0" aria-hidden="true" />
+                ) : (
+                  <Folder size={19} strokeWidth={1.7} className="shrink-0" aria-hidden="true" />
+                )}
                 {!p.isCollapsed && <span className="truncate">{x}</span>}
+                {p.sharedProjects.has(x) && <span className="sr-only">(shared)</span>}
               </button>
-              {!p.isCollapsed && !p.projectsWithTasks.has(x) && (
+              {!p.isCollapsed && p.ownedProjects.has(x) && (
                 <button
-                  className={`${sidebarIconButtonClass} absolute right-0 top-1/2 -translate-y-1/2 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-orange-500 dark:focus-visible:outline-orange-400`}
-                  aria-label={`Delete empty project ${x}`}
-                  title={`Delete empty project ${x}`}
-                  onClick={() => p.onDeleteProject(x)}
+                  className={`${sidebarIconButtonClass} absolute right-0 top-1/2 -translate-y-1/2 opacity-0 group-hover/project:opacity-100 focus-visible:opacity-100 transition-opacity focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-orange-500 dark:focus-visible:outline-orange-400`}
+                  aria-label={`Delete project ${x}`}
+                  title={`Delete project ${x}`}
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    p.onDeleteProject(x)
+                  }}
                 >
                   <Trash2 size={16} aria-hidden="true" />
                 </button>

@@ -251,7 +251,7 @@ function Receipt({
       </dl>
 
       <p className="m-0 mt-6 text-[0.78rem] leading-[1.5] text-[#6b7280] dark:text-[#9ca3af]">
-        This checkout ran in Stripe test mode. No real payment was taken and no card was charged.
+        Billing in Daymark is simulated. No real payment was taken and no card was charged.
       </p>
     </aside>
   )

@@ -1,5 +1,12 @@
 export type BillingPeriod = 'monthly' | 'yearly'
 export type PlanId = 'plus' | 'pro'
+/** The plan a user is on, as sent by the API. Each tier includes the ones below it. */
+export type PlanTier = 'free' | PlanId
+
+const TIER_RANK: Record<PlanTier, number> = { free: 0, plus: 1, pro: 2 }
+
+export const planIncludes = (plan: PlanTier, required: PlanTier) =>
+  TIER_RANK[plan] >= TIER_RANK[required]
 
 export type PlanFeature = {
   label: string
@@ -29,6 +36,8 @@ export const PLANS: UpgradePlan[] = [
     description: 'For a steadier daily rhythm.',
     monthlyPrice: { monthly: 5, yearly: 4 },
     features: [
+      { label: 'Gentle reminders and quiet hours' },
+      { label: 'Focus sessions' },
       { label: 'Unlimited projects' },
       { label: 'Flexible daily views' },
       { label: 'Upcoming planning' },
@@ -41,6 +50,8 @@ export const PLANS: UpgradePlan[] = [
     monthlyPrice: { monthly: 10, yearly: 8 },
     features: [
       { label: 'Everything in Plus' },
+      { label: 'Shared projects' },
+      { label: 'Google Calendar beside your day' },
       { label: 'Reporting and weekly reflection' },
       { label: 'Filters and labels' },
       { label: 'Priority help when you need it' },
@@ -57,6 +68,9 @@ export const isPlanId = (value: unknown): value is PlanId => PLANS.some((plan) =
 
 export const findPlan = (id: PlanId): UpgradePlan =>
   PLANS.find((plan) => plan.id === id) ?? PLANS[0]
+
+/** Screen-reader suffix for controls that open the upgrade dialog instead of the feature. */
+export const lockedSuffix = (plan: PlanId) => ` (part of Daymark ${findPlan(plan).name})`
 
 /** The amount charged when the trial ends: one month, or twelve months up front. */
 export const firstChargeFor = (plan: UpgradePlan, period: BillingPeriod) =>

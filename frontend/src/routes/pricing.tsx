@@ -34,9 +34,13 @@ const PLANS: PricingPlan[] = [
 const COMPARISON_ROWS = [
   { label: 'Inbox and Today views', values: ['Included', 'Included', 'Included'] },
   { label: 'Tasks and projects', values: ['Included', 'Included', 'Included'] },
+  { label: 'Gentle reminders and quiet hours', values: ['—', 'Included', 'Included'] },
+  { label: 'Focus sessions', values: ['—', 'Included', 'Included'] },
   { label: 'Unlimited projects', values: ['—', 'Included', 'Included'] },
   { label: 'Flexible daily views', values: ['—', 'Included', 'Included'] },
   { label: 'Upcoming planning', values: ['—', 'Included', 'Included'] },
+  { label: 'Shared projects', values: ['—', '—', 'Included'] },
+  { label: 'Google Calendar beside your day', values: ['—', '—', 'Included'] },
   { label: 'Reporting and weekly reflection', values: ['—', '—', 'Included'] },
   { label: 'Filters and labels', values: ['—', '—', 'Included'] },
   { label: 'Priority help', values: ['—', '—', 'Included'] },

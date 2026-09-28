@@ -93,7 +93,7 @@ class AuthController extends Controller
 
         $clientId = config("services.{$provider}.client_id");
         if (empty($clientId)) {
-            $errorMessage = "Google Client ID is not configured in backend/.env. Please set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET.";
+            $errorMessage = 'Google Client ID is not configured in backend/.env. Please set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET.';
             if ($request->expectsJson() || $request->query('json')) {
                 return response()->json([
                     'message' => $errorMessage,
@@ -101,7 +101,8 @@ class AuthController extends Controller
             }
 
             $frontendUrl = rtrim(config('app.frontend_url', env('FRONTEND_URL', 'http://localhost:5173')), '/');
-            return redirect()->to($frontendUrl . '/login?error=' . urlencode($errorMessage));
+
+            return redirect()->to($frontendUrl.'/login?error='.urlencode($errorMessage));
         }
 
         $targetUrl = Socialite::driver($provider)->stateless()->redirect()->getTargetUrl();
@@ -129,7 +130,7 @@ class AuthController extends Controller
                 ])->get('https://oauth2.googleapis.com/tokeninfo', ['id_token' => $idToken]);
 
                 if (! $tokenInfoResponse->successful()) {
-                    throw new \Exception('Invalid Google ID token: ' . ($tokenInfoResponse->json('error_description') ?? 'Verification failed'));
+                    throw new \Exception('Invalid Google ID token: '.($tokenInfoResponse->json('error_description') ?? 'Verification failed'));
                 }
 
                 $googleData = $tokenInfoResponse->json();
@@ -174,24 +175,26 @@ class AuthController extends Controller
         } catch (\Throwable $e) {
             if ($request->expectsJson()) {
                 return response()->json([
-                    'message' => 'Unable to authenticate with ' . ucfirst($provider) . ': ' . $e->getMessage(),
+                    'message' => 'Unable to authenticate with '.ucfirst($provider).': '.$e->getMessage(),
                 ], 422);
             }
 
             $frontendUrl = rtrim(config('app.frontend_url', env('FRONTEND_URL', 'http://localhost:5173')), '/');
-            return redirect()->to($frontendUrl . '/login?error=' . urlencode('Social authentication failed: ' . $e->getMessage()));
+
+            return redirect()->to($frontendUrl.'/login?error='.urlencode('Social authentication failed: '.$e->getMessage()));
         }
 
         $email = $socialUser->getEmail();
         if (! $email) {
             if ($request->expectsJson()) {
                 return response()->json([
-                    'message' => 'No email address provided by ' . ucfirst($provider),
+                    'message' => 'No email address provided by '.ucfirst($provider),
                 ], 422);
             }
 
             $frontendUrl = rtrim(config('app.frontend_url', env('FRONTEND_URL', 'http://localhost:5173')), '/');
-            return redirect()->to($frontendUrl . '/login?error=' . urlencode('No email provided by social provider'));
+
+            return redirect()->to($frontendUrl.'/login?error='.urlencode('No email provided by social provider'));
         }
 
         $user = DB::transaction(function () use ($socialUser, $provider, $email): User {
@@ -228,7 +231,8 @@ class AuthController extends Controller
         }
 
         $frontendUrl = rtrim(config('app.frontend_url', env('FRONTEND_URL', 'http://localhost:5173')), '/');
-        return redirect()->to($frontendUrl . '/login?token=' . urlencode($token));
+
+        return redirect()->to($frontendUrl.'/login?token='.urlencode($token));
     }
 
     /**
@@ -294,7 +298,7 @@ class AuthController extends Controller
 
         $validated = $request->validate([
             'name' => ['required', 'string', 'max:255'],
-            'email' => ['required', 'string', 'email', 'max:255', 'unique:users,email,' . $user->id],
+            'email' => ['required', 'string', 'email', 'max:255', 'unique:users,email,'.$user->id],
         ]);
 
         $user->update([
@@ -304,6 +308,36 @@ class AuthController extends Controller
 
         return response()->json([
             'message' => 'Profile updated successfully',
+            'user' => $user->fresh()->load('accounts'),
+        ]);
+    }
+
+    /**
+     * Update planning preferences: the user's timezone and the weekly recap email.
+     */
+    public function updatePreferences(Request $request): JsonResponse
+    {
+        $user = $request->user();
+
+        $user->update($request->validate([
+            'timezone' => ['sometimes', 'string', 'timezone:all'],
+            'weekly_recap' => ['sometimes', 'boolean'],
+            'quiet_hours_start' => ['nullable', 'date_format:H:i', 'required_with:quiet_hours_end'],
+            'quiet_hours_end' => ['nullable', 'date_format:H:i', 'required_with:quiet_hours_start'],
+            'morning_digest' => ['sometimes', 'boolean'],
+            'evening_winddown' => ['sometimes', 'boolean'],
+        ]));
+
+        // Reminder times are stored in UTC, so they move with the user's timezone.
+        if ($user->wasChanged('timezone')) {
+            $user->tasks()->whereNotNull('reminder')->whereNull('reminded_at')->get()
+                ->each(function ($task): void {
+                    $task->scheduleReminder();
+                    $task->save();
+                });
+        }
+
+        return response()->json([
             'user' => $user->fresh()->load('accounts'),
         ]);
     }

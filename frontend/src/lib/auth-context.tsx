@@ -1,6 +1,8 @@
-import { createContext, useContext, useState, useCallback, type ReactNode } from 'react'
+import { createContext, useContext, useEffect, useState, useCallback, type ReactNode } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from './api'
+import { planIncludes, type PlanTier } from './plans'
+import { disablePush } from './reminders'
 
 export interface UserAccount {
   id: number
@@ -17,6 +19,13 @@ export interface User {
   email: string
   email_verified_at?: string | null
   accounts?: UserAccount[]
+  plan: PlanTier
+  timezone?: string
+  weekly_recap?: boolean
+  quiet_hours_start?: string | null
+  quiet_hours_end?: string | null
+  morning_digest?: boolean
+  evening_winddown?: boolean
   created_at: string
   updated_at: string
 }
@@ -101,6 +110,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const logout = useCallback(async () => {
     try {
+      // Someone else may sign in on this browser next; stop sending it this account's reminders.
+      await disablePush().catch(() => {})
       await api.post('/auth/logout')
     } catch {
       // Ignore network / auth errors during logout
@@ -122,6 +133,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     },
     [queryClient],
   )
+
+  // Keep the server's timezone in step with the browser, so emails like the weekly recap
+  // arrive at the right local time.
+  const userTimezone = user?.timezone
+  useEffect(() => {
+    if (!userTimezone) return
+    const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone
+    if (!timezone || timezone === userTimezone) return
+    api
+      .put<{ user: User }>('/auth/preferences', { timezone })
+      .then(({ data }) => queryClient.setQueryData(['auth', 'user'], data.user))
+      .catch(() => {
+        // Not critical; it will try again next session.
+      })
+  }, [userTimezone, queryClient])
 
   const isLoading = !!token && isUserLoading
   const isAuthenticated = !!token && !!user
@@ -150,4 +176,11 @@ export function useAuth() {
     throw new Error('useAuth must be used within an AuthProvider')
   }
   return context
+}
+
+/** The signed-in user's plan, and whether it includes a given tier. */
+export function usePlan() {
+  const { user } = useAuth()
+  const plan: PlanTier = user?.plan ?? 'free'
+  return { plan, has: (required: PlanTier) => planIncludes(plan, required) }
 }

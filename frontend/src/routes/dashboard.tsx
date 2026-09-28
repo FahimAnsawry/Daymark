@@ -1,5 +1,6 @@
 import { createFileRoute, useNavigate } from '@tanstack/react-router'
 import { useEffect, useMemo, useRef, useState } from 'react'
+import toast from 'react-hot-toast'
 import {
   Bell,
   CalendarDays,
@@ -17,54 +18,79 @@ import {
   Send,
   SlidersHorizontal,
   Sun,
+  Timer,
   Trash2,
+  UsersRound,
   X,
 } from 'lucide-react'
 import {
   DashboardSidebar,
   LINKABLE_VIEWS,
   type DashboardView,
-  type LinkableView,
 } from '../components/DashboardSidebar'
+import { ConfirmDeleteDialog } from '../components/ConfirmDeleteDialog'
+import { FocusPanel } from '../components/FocusPanel'
+import { CalendarSettings } from '../components/CalendarSettings'
+import { FocusView } from '../components/FocusView'
 import { LoadingPage } from '../components/LoadingPage'
+import { PlanLock } from '../components/PlanLock'
+import { lockedSuffix } from '../lib/plans'
+import { ReminderPicker } from '../components/ReminderPicker'
+import { ReminderSettings } from '../components/ReminderSettings'
+import { ShareProjectDialog } from '../components/ShareProjectDialog'
+import { SharedProjectsView } from '../components/SharedProjectsView'
+import { TaskReport } from '../components/TaskReport'
+import { TodayCalendar } from '../components/TodayCalendar'
 import { UpgradeDialog } from '../components/UpgradeDialog'
-import { useAuth } from '../lib/auth-context'
-import { deleteEmptyProject } from '../lib/projects'
+import { useAuth, usePlan } from '../lib/auth-context'
+import { useBilling, useCancelTrial } from '../lib/billing'
+import { reminderLabel, useReminderNotifications, type ReminderSetting } from '../lib/reminders'
+import { assignablePeople, takePendingInvite, useProjectMembers } from '../lib/sharing'
+import {
+  localDate,
+  useCompleteTask,
+  useCreateProject,
+  useCreateTask,
+  useDeleteProject,
+  useDeleteTask,
+  useLocalTaskImport,
+  useProjectRows,
+  useProjects,
+  useTasks,
+  useUpdateTask,
+  type ProjectRow,
+  type Reminder,
+  type Task,
+} from '../lib/tasks'
+/** The current view and Filters & Labels chip live in the URL, so a reload keeps them. */
+/** `calendar` is how Google's consent screen reports back; it's shown once, then dropped. */
+type DashboardSearch = {
+  view?: DashboardView
+  label?: string
+  calendar?: 'connected' | 'error'
+}
+const URL_VIEWS = [...LINKABLE_VIEWS, 'search', 'notifications'] as const
 export const Route = createFileRoute('/dashboard')({
   component: DashboardPage,
-  validateSearch: (search: Record<string, unknown>): { view?: LinkableView } => {
-    const view = LINKABLE_VIEWS.find((v) => v === search.view)
-    return view ? { view } : {}
+  validateSearch: (search: Record<string, unknown>): DashboardSearch => {
+    const view = typeof search.view === 'string' ? search.view : ''
+    const label = typeof search.label === 'string' ? search.label.trim().slice(0, 255) : ''
+    const isKnownView =
+      (URL_VIEWS as readonly string[]).includes(view) ||
+      (view.startsWith('project:') && view.length > 8)
+    return {
+      ...(isKnownView && { view: view as DashboardView }),
+      ...(label && { label }),
+      ...((search.calendar === 'connected' || search.calendar === 'error') && {
+        calendar: search.calendar,
+      }),
+    }
   },
 })
-type Task = {
-  id: string
-  title: string
-  done: boolean
-  due: string
-  project: string
-  label: string
-  time?: string
-  repeat?: 'none' | 'daily' | 'weekly' | 'monthly'
-}
 const today = () => new Date().toLocaleDateString('en-CA')
-const localDate = (date: Date) =>
-  `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
 const moveDate = (date: Date, days: number) => {
   const next = new Date(date)
   next.setDate(next.getDate() + days)
-  return localDate(next)
-}
-const nextRepeatDate = (due: string, repeat: Task['repeat']) => {
-  const next = new Date(`${due}T12:00:00`)
-  if (repeat === 'daily') next.setDate(next.getDate() + 1)
-  if (repeat === 'weekly') next.setDate(next.getDate() + 7)
-  if (repeat === 'monthly') {
-    const day = next.getDate()
-    next.setDate(1)
-    next.setMonth(next.getMonth() + 1)
-    next.setDate(Math.min(day, new Date(next.getFullYear(), next.getMonth() + 1, 0).getDate()))
-  }
   return localDate(next)
 }
 const dashboardIconButtonClass =
@@ -73,22 +99,59 @@ const dashboardPrimaryClass =
   'inline-flex cursor-pointer items-center justify-center gap-[9px] rounded-full border-0 btn-primary px-[15px] py-[9px] text-sm font-medium uppercase tracking-[0.05em] transition-colors duration-150 motion-reduce:transition-none'
 const dl = (d: string) =>
   new Date(`${d}T12:00:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
-const load = <T,>(k: string, f: T): T => {
-  try {
-    return JSON.parse(localStorage.getItem(k) || 'null') ?? f
-  } catch {
-    return f
-  }
-}
+/** Optimistically added tasks have a temporary negative id until the server responds. */
+const isSaved = (task: Task) => task.id > 0
+const NO_TASKS: Task[] = []
+const NO_PROJECTS: string[] = []
 function DashboardPage() {
   const nav = useNavigate()
-  const { view: initialView } = Route.useSearch()
+  const searchParams = Route.useSearch()
+  const navigateSearch = useNavigate({ from: Route.fullPath })
+  const view = searchParams.view ?? 'inbox'
+  const filter = searchParams.label ?? ''
+  const calendarResult = searchParams.calendar
+  useEffect(() => {
+    if (!calendarResult) return
+    if (calendarResult === 'connected') toast.success('Google Calendar is connected.')
+    else toast.error('We couldn’t connect Google Calendar. Please try again.')
+    void navigateSearch({
+      search: (prev) => ({ ...prev, calendar: undefined }),
+      replace: true,
+    })
+  }, [calendarResult, navigateSearch])
+  const setView = (next: DashboardView) =>
+    void navigateSearch({ search: (prev) => ({ ...prev, view: next }), replace: true })
+  const setFilter = (next: string) =>
+    void navigateSearch({
+      search: (prev) => ({ ...prev, label: next || undefined }),
+      replace: true,
+    })
   const { user, isAuthenticated, isLoading } = useAuth()
-  const key = `daymark.${user?.id || 'guest'}`
-  const [view, setView] = useState<DashboardView>(initialView ?? 'inbox'),
-    [tasks, setTasks] = useState<Task[]>(() => load(`${key}.tasks`, [])),
-    [projects, setProjects] = useState<string[]>(() => load(`${key}.projects`, [])),
-    [collapsed, setCollapsed] = useState(false),
+  const { has } = usePlan()
+  const hasPlus = has('plus')
+  const hasPro = has('pro')
+  const isImporting = useLocalTaskImport(user?.id)
+  const canLoad = isAuthenticated && !isImporting
+  const tasksQuery = useTasks(canLoad)
+  const projectsQuery = useProjects(canLoad)
+  const projectRowsQuery = useProjectRows(canLoad)
+  const tasks = tasksQuery.data ?? NO_TASKS
+  const projects = projectsQuery.data ?? NO_PROJECTS
+  const createTaskMutation = useCreateTask()
+  const completeTaskMutation = useCompleteTask()
+  const updateTaskMutation = useUpdateTask()
+  const deleteTaskMutation = useDeleteTask()
+  const createProjectMutation = useCreateProject()
+  const deleteProjectMutation = useDeleteProject()
+  const billingQuery = useBilling()
+  const cancelTrialMutation = useCancelTrial()
+  const isTrial = Boolean(
+    billingQuery.data?.on_trial ||
+    (user?.plan &&
+      user.plan !== 'free' &&
+      (billingQuery.data?.status === 'trialing' || billingQuery.data?.status === 'canceled')),
+  )
+  const [collapsed, setCollapsed] = useState(false),
     [mobile, setMobile] = useState(false),
     [adding, setAdding] = useState(false),
     [addProject, setAddProject] = useState(false),
@@ -104,14 +167,22 @@ function DashboardPage() {
     [labelOpen, setLabelOpen] = useState(false),
     [time, setTime] = useState(''),
     [repeat, setRepeat] = useState<NonNullable<Task['repeat']>>('none'),
+    [reminder, setReminder] = useState<ReminderSetting>(null),
+    [taskType, setTaskType] = useState<'normal' | 'reminder'>('normal'),
+    [focusTask, setFocusTask] = useState<Task | null>(null),
+    [shareTarget, setShareTarget] = useState<ProjectRow | null>(null),
     [query, setQuery] = useState(''),
-    [filter, setFilter] = useState(''),
     [calendarMonth, setCalendarMonth] = useState(() => {
       const next = new Date()
       next.setDate(next.getDate() + 1)
       return new Date(next.getFullYear(), next.getMonth(), 1)
     }),
-    [selectedDate, setSelectedDate] = useState(() => moveDate(new Date(), 1))
+    [selectedDate, setSelectedDate] = useState(() => moveDate(new Date(), 1)),
+    [deleteTarget, setDeleteTarget] = useState<
+      | { type: 'task'; task: Task }
+      | { type: 'project'; projectName: string; taskCount: number }
+      | null
+    >(null)
   const search = useRef<HTMLInputElement>(null)
   const projectTrigger = useRef<HTMLButtonElement>(null)
   const dateTrigger = useRef<HTMLButtonElement>(null)
@@ -123,18 +194,35 @@ function DashboardPage() {
   useEffect(() => {
     if (!isLoading && !isAuthenticated) void nav({ to: '/login' })
   }, [isLoading, isAuthenticated, nav])
+  // An invitation opened while signed out is picked back up after signing in.
   useEffect(() => {
-    if (user) {
-      setTasks(load(`${key}.tasks`, []))
-      setProjects(load(`${key}.projects`, []))
-    }
-  }, [user, key])
+    if (!isAuthenticated) return
+    const pendingInvite = takePendingInvite()
+    if (pendingInvite) void nav({ to: '/invite/$token', params: { token: pendingInvite } })
+  }, [isAuthenticated, nav])
+  useReminderNotifications(tasks, hasPlus)
+  const projectRows = projectRowsQuery.data
+  const currentProject = view.startsWith('project:')
+    ? projectRows?.find((row) => row.name === view.slice(8))
+    : undefined
+  // Only owners invite, and inviting is Pro; members of a shared project are never locked out.
+  const shareLocked = currentProject?.is_owner !== false && !hasPro
+  const isSharedProject = (row: { is_owner?: boolean; members_count?: number } | undefined) =>
+    !!row && (row.is_owner === false || (row.members_count ?? 0) > 0)
+  const currentMembers = useProjectMembers(
+    currentProject && isSharedProject(currentProject) ? currentProject.id : null,
+  )
+  const assignees = assignablePeople(currentMembers.data)
   useEffect(() => {
-    if (user) localStorage.setItem(`${key}.tasks`, JSON.stringify(tasks))
-  }, [tasks, key, user])
-  useEffect(() => {
-    if (user) localStorage.setItem(`${key}.projects`, JSON.stringify(projects))
-  }, [projects, key, user])
+    // A bookmarked or reloaded URL can point to a project that has since been deleted.
+    if (
+      view.startsWith('project:') &&
+      projectsQuery.isSuccess &&
+      !createProjectMutation.isPending &&
+      !projects.includes(view.slice(8))
+    )
+      void navigateSearch({ search: (prev) => ({ ...prev, view: 'inbox' }), replace: true })
+  }, [view, projects, projectsQuery.isSuccess, createProjectMutation.isPending, navigateSearch])
   useEffect(() => {
     if (view === 'search') search.current?.focus()
   }, [view])
@@ -184,15 +272,19 @@ function DashboardPage() {
       dialogReturnFocus.current = null
     }
   }, [adding])
+  const isTaskDone = (t: Task) =>
+    t.done || Boolean(t.completed_at && t.completed_at.slice(0, 10) === today())
+
   const visible = useMemo(
     () =>
       tasks.filter((t) =>
         view === 'inbox'
-          ? !t.done && !t.due && !t.project
+          ? !isTaskDone(t) && !t.due && !t.project
           : view === 'today'
-            ? !t.done && t.due === today()
+            ? t.due === today() ||
+              (isTaskDone(t) && Boolean(t.completed_at && t.completed_at.slice(0, 10) === today()))
             : view === 'upcoming'
-              ? !t.done && !!t.due && t.due > today()
+              ? !isTaskDone(t) && !!t.due && t.due > today()
               : view === 'search'
                 ? t.title.toLowerCase().includes(query.toLowerCase())
                 : view === 'filters'
@@ -202,6 +294,16 @@ function DashboardPage() {
                     : false,
       ),
     [tasks, view, query, filter],
+  )
+
+  const todayActiveTasks = useMemo(
+    () => (view === 'today' ? visible.filter((t) => !isTaskDone(t)) : visible),
+    [visible, view],
+  )
+
+  const todayCompletedTasks = useMemo(
+    () => (view === 'today' ? visible.filter((t) => isTaskDone(t)) : []),
+    [visible, view],
   )
   const labels = [...new Set(tasks.map((t) => t.label).filter(Boolean))]
   const projectMatches = projects.filter((name) =>
@@ -221,6 +323,10 @@ function DashboardPage() {
           upcoming: 'Upcoming',
           filters: 'Filters & Labels',
           reporting: 'Reporting',
+          focus: 'Focus sessions',
+          shared: 'Shared projects',
+          reminders: 'Reminders',
+          calendar: 'Calendar',
           search: 'Search',
           help: 'Help & resources',
           notifications: 'Notifications',
@@ -240,19 +346,20 @@ function DashboardPage() {
   }
   const add = () => {
     if (!draft.trim()) return
-    setTasks((x) => [
-      ...x,
-      {
-        id: crypto.randomUUID(),
-        title: draft.trim(),
-        done: false,
-        due,
-        project,
-        label,
-        time,
-        repeat,
-      },
-    ])
+    createTaskMutation.mutate({
+      title: draft.trim(),
+      due,
+      project,
+      label,
+      time,
+      repeat,
+      ...(reminder &&
+        due && {
+          reminder: reminder.reminder,
+          reminder_early: reminder.early,
+          reminder_frequency: reminder.frequency,
+        }),
+    })
     setDraft('')
     setDue('')
     setProject('')
@@ -263,22 +370,33 @@ function DashboardPage() {
     setLabelOpen(false)
     setTime('')
     setRepeat('none')
+    setReminder(null)
+    setTaskType('normal')
     setAdding(false)
   }
   const createProject = () => {
     if (!projectDraft.trim()) return
     const n = projectDraft.trim()
-    setProjects((x) => (x.includes(n) ? x : [...x, n]))
+    if (!projects.includes(n)) createProjectMutation.mutate(n)
     go(`project:${n}`)
     setProjectDraft('')
     setAddProject(false)
   }
-  const deleteProject = (name: string) => {
-    const remaining = deleteEmptyProject(projects, tasks, name)
-    if (remaining === projects) return
-    setProjects(remaining)
-    if (view === `project:${name}`) go('inbox')
-    setProject((current) => (current === name ? '' : current))
+  const handleDeleteProjectClick = (name: string) => {
+    const taskCount = tasks.filter((t) => t.project === name).length
+    setDeleteTarget({ type: 'project', projectName: name, taskCount })
+  }
+  const confirmDelete = () => {
+    if (!deleteTarget) return
+    if (deleteTarget.type === 'task') {
+      if (isSaved(deleteTarget.task)) deleteTaskMutation.mutate(deleteTarget.task)
+    } else if (deleteTarget.type === 'project') {
+      const { projectName } = deleteTarget
+      deleteProjectMutation.mutate(projectName)
+      if (view === `project:${projectName}`) go('inbox')
+      setProject((current) => (current === projectName ? '' : current))
+    }
+    setDeleteTarget(null)
   }
   const open = () => {
     if (adding) {
@@ -293,6 +411,8 @@ function DashboardPage() {
     setDue(view === 'today' ? today() : '')
     setTime('')
     setRepeat('none')
+    setReminder(null)
+    setTaskType('normal')
     setLabelOpen(Boolean(label))
     setAdding(true)
   }
@@ -310,22 +430,152 @@ function DashboardPage() {
   const createProjectFromTask = () => {
     const name = projectSearch.trim()
     if (!name || !canCreateProject) return
-    setProjects((current) => [...current, name])
+    createProjectMutation.mutate(name)
     chooseProject(name)
   }
-  if (isLoading) return <LoadingPage />
+  const completeTask = (task: Task) => {
+    if (isSaved(task)) completeTaskMutation.mutate(task)
+  }
+  if (isLoading || isImporting || (canLoad && (tasksQuery.isPending || projectsQuery.isPending)))
+    return <LoadingPage />
   if (!isAuthenticated || !user) return null
+
+  const renderTaskRow = (t: Task) => {
+    const done = isTaskDone(t)
+    const isReminder = Boolean(t.reminder)
+    return (
+      <div
+        className="group flex min-h-14 items-center gap-3 border-b border-[#d9dee7] dark:border-[#383838]"
+        key={t.id}
+      >
+        <button
+          className={`grid size-5 shrink-0 cursor-pointer place-items-center rounded-full border ${
+            done
+              ? 'border-[#c2410c] bg-[#c2410c] text-white dark:border-[#fed7aa] dark:bg-[#fed7aa] dark:text-[#1f2937]'
+              : 'border-[#667085] bg-transparent text-white'
+          }`}
+          aria-label={done ? `Uncomplete ${t.title}` : `Complete ${t.title}`}
+          onClick={() => completeTask(t)}
+        >
+          {done && <Check size={13} />}
+        </button>
+        <div className="grid flex-1 gap-[5px]">
+          <div className="flex items-center gap-2">
+            <span
+              className={`text-sm ${done ? 'text-[#667085] line-through dark:text-[#a7b0bf]' : ''}`}
+            >
+              {t.title}
+            </span>
+            {isReminder && (
+              <span className="inline-flex items-center gap-1 rounded bg-orange-100 px-1.5 py-0.5 text-[11px] font-medium text-orange-800 dark:bg-orange-950/60 dark:text-orange-300">
+                <Bell size={10} aria-hidden="true" />
+                <span>Reminder</span>
+              </span>
+            )}
+          </div>
+          <small className="text-[11px] text-[#667085] dark:text-[#a7b0bf]">
+            {[
+              t.due && dl(t.due),
+              t.time,
+              t.repeat && t.repeat !== 'none' && `Repeats ${t.repeat}`,
+              t.reminder &&
+                `Reminder: ${reminderLabel(t.reminder, t.reminder_frequency, t.reminder_early).toLowerCase()}`,
+              t.project,
+              t.assignee && `For ${t.assignee.id === user.id ? 'you' : t.assignee.name}`,
+              t.label,
+            ]
+              .filter(Boolean)
+              .join(' · ')}
+          </small>
+        </div>
+        {isSaved(t) && !done && (
+          <div className="flex items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100 max-[900px]:opacity-100 motion-reduce:transition-none">
+            {assignees.length > 0 && (
+              <select
+                aria-label={`Assign ${t.title}`}
+                className="h-8 max-w-[120px] cursor-pointer rounded-md border border-[#d9dee7] bg-transparent px-1.5 text-[12px] text-[#475467] dark:border-[#383838] dark:text-[#c9ced6]"
+                value={t.assignee?.id ?? ''}
+                onChange={(event) => {
+                  const person = assignees.find(
+                    (candidate) => candidate.id === Number(event.target.value),
+                  )
+                  updateTaskMutation.mutate({
+                    task: t,
+                    changes: {
+                      assignee: person ? { id: person.id, name: person.name } : null,
+                    },
+                  })
+                }}
+              >
+                <option value="">Anyone</option>
+                {assignees.map((person) => (
+                  <option key={person.id} value={person.id}>
+                    {person.id === user.id ? 'Me' : person.name}
+                  </option>
+                ))}
+              </select>
+            )}
+            <ReminderPicker
+              variant="icon"
+              taskTitle={t.title}
+              value={t.reminder ?? null}
+              early={t.reminder_early ?? false}
+              frequency={t.reminder_frequency ?? null}
+              onChange={(next) =>
+                updateTaskMutation.mutate({
+                  task: t,
+                  changes: {
+                    reminder: next?.reminder ?? null,
+                    reminder_early: next?.early ?? false,
+                    reminder_frequency: next?.frequency ?? null,
+                    ...(next && !t.due && { due: today() }),
+                  },
+                })
+              }
+              locked={!hasPlus}
+              onUpgrade={() => setUpgradeOpen(true)}
+              hasDueDate={!!t.due}
+              suggestedTime={t.time}
+            />
+            {!isReminder && (
+              <button
+                className={`${dashboardIconButtonClass} relative text-[#667085] dark:text-[#a7b0bf]`}
+                aria-label={`Focus on ${t.title}${hasPlus ? '' : lockedSuffix('plus')}`}
+                aria-haspopup={hasPlus ? undefined : 'dialog'}
+                title={hasPlus ? 'Focus' : 'Focus (Plus)'}
+                onClick={() => (hasPlus ? setFocusTask(t) : setUpgradeOpen(true))}
+              >
+                <Timer size={16} />
+                {!hasPlus && <PlanLock plan="plus" variant="dot" />}
+              </button>
+            )}
+          </div>
+        )}
+        <button
+          className={`${dashboardIconButtonClass} text-[#667085] opacity-0 group-hover:opacity-100 focus-visible:opacity-100 hover:text-red-600 dark:text-[#a7b0bf] dark:hover:text-red-400`}
+          aria-label={`Delete ${t.title}`}
+          onClick={() => setDeleteTarget({ type: 'task', task: t })}
+        >
+          <Trash2 size={16} />
+        </button>
+      </div>
+    )
+  }
   return (
     <div className="min-h-screen bg-app-background font-sans text-[#1f2937] transition-colors duration-250 dark:text-[#f3f4f6] motion-reduce:transition-none">
       <DashboardSidebar
         view={view}
         onViewChange={go}
         projects={projects}
+        sharedProjects={new Set(projectRows?.filter(isSharedProject).map((row) => row.name) ?? [])}
+        ownedProjects={
+          new Set(projectRows?.filter((row) => row.is_owner !== false).map((row) => row.name) ?? [])
+        }
         projectsWithTasks={new Set(tasks.map((task) => task.project))}
         onAddTask={open}
         onAddProject={() => setAddProject(true)}
         onTryPro={() => setUpgradeOpen(true)}
-        onDeleteProject={deleteProject}
+        onDeleteProject={handleDeleteProjectClick}
         isMobileOpen={mobile}
         onCloseMobile={() => setMobile(false)}
         isCollapsed={collapsed}
@@ -356,6 +606,28 @@ function DashboardPage() {
         }`}
       >
         <div className="mx-auto max-w-[920px] px-10 py-16 max-[900px]:px-[18px] max-[900px]:py-6">
+          {isTrial && (
+            <div className="mb-6 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-300 bg-amber-50/90 px-4 py-2.5 text-sm text-amber-900 shadow-xs dark:border-amber-700/60 dark:bg-amber-950/40 dark:text-amber-200">
+              <div className="flex items-center gap-2">
+                <span className="inline-block h-2 w-2 rounded-full bg-amber-500 animate-pulse" />
+                <span>
+                  Free trial active: <strong>Daymark {user.plan === 'pro' ? 'Pro' : 'Plus'}</strong>
+                  {billingQuery.data?.trial_ends_at &&
+                    ` (ends ${new Date(billingQuery.data.trial_ends_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })})`}
+                </span>
+              </div>
+              <button
+                type="button"
+                className="cursor-pointer rounded-lg border border-red-300 bg-white px-3 py-1.5 text-xs font-semibold text-red-700 shadow-xs transition-colors hover:bg-red-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-red-500 dark:border-red-800 dark:bg-[#1f1f1f] dark:text-red-400 dark:hover:bg-red-950/40"
+                disabled={cancelTrialMutation.isPending}
+                onClick={() => cancelTrialMutation.mutate()}
+              >
+                {cancelTrialMutation.isPending
+                  ? 'Cancelling trial…'
+                  : 'Cancel free trial (temporary)'}
+              </button>
+            </div>
+          )}
           <header className="mb-[30px] flex items-center justify-between max-[900px]:mb-6 max-[900px]:justify-start max-[900px]:gap-3 max-[900px]:pr-10">
             <button
               className={`${dashboardIconButtonClass} hidden max-[900px]:grid`}
@@ -367,6 +639,30 @@ function DashboardPage() {
             <h1 className="m-0 min-w-0 truncate font-display text-[30px] font-semibold tracking-[-0.03em] max-[900px]:text-[26px]">
               {heading}
             </h1>
+            {currentProject && (
+              <div className="ml-auto flex items-center gap-1">
+                <button
+                  className={`${dashboardIconButtonClass} relative text-[#667085] dark:text-[#a7b0bf]`}
+                  aria-label={`Share project ${currentProject.name}${shareLocked ? lockedSuffix('pro') : ''}`}
+                  aria-haspopup="dialog"
+                  title={shareLocked ? 'Share (Pro)' : 'Share'}
+                  onClick={() => setShareTarget(currentProject)}
+                >
+                  <UsersRound size={18} />
+                  {shareLocked && <PlanLock plan="pro" variant="dot" />}
+                </button>
+                {currentProject.is_owner !== false && (
+                  <button
+                    className={`${dashboardIconButtonClass} text-[#667085] hover:text-red-600 dark:text-[#a7b0bf] dark:hover:text-red-400`}
+                    aria-label={`Delete project ${currentProject.name}`}
+                    title={`Delete project ${currentProject.name}`}
+                    onClick={() => handleDeleteProjectClick(currentProject.name)}
+                  >
+                    <Trash2 size={18} />
+                  </button>
+                )}
+              </div>
+            )}
           </header>
           {adding && (
             <form
@@ -377,6 +673,44 @@ function DashboardPage() {
                 add()
               }}
             >
+              <div className="mb-2.5 flex items-center gap-1.5">
+                <button
+                  type="button"
+                  className={`cursor-pointer rounded-full px-2.5 py-1 text-xs font-semibold transition-colors ${
+                    taskType === 'normal'
+                      ? 'bg-[#1f2937] text-white dark:bg-[#f2f2f2] dark:text-[#1f1f1f]'
+                      : 'bg-[#f4f1e9] text-[#667085] hover:bg-[#e9e5da] dark:bg-[#383838] dark:text-[#a7b0bf] dark:hover:bg-[#444]'
+                  }`}
+                  onClick={() => {
+                    setTaskType('normal')
+                    setReminder(null)
+                  }}
+                >
+                  Normal task
+                </button>
+                <button
+                  type="button"
+                  className={`flex cursor-pointer items-center gap-1 rounded-full px-2.5 py-1 text-xs font-semibold transition-colors ${
+                    taskType === 'reminder'
+                      ? 'bg-orange-600 text-white dark:bg-orange-500'
+                      : 'bg-[#f4f1e9] text-[#667085] hover:bg-[#e9e5da] dark:bg-[#383838] dark:text-[#a7b0bf] dark:hover:bg-[#444]'
+                  }`}
+                  onClick={() => {
+                    setTaskType('reminder')
+                    if (!reminder) {
+                      setReminder({
+                        reminder: (time || '09:00') as Reminder,
+                        early: false,
+                        frequency: null,
+                      })
+                    }
+                    if (!due) setDue(today())
+                  }}
+                >
+                  <Bell size={12} aria-hidden="true" />
+                  Reminder task
+                </button>
+              </div>
               <input
                 ref={taskInput}
                 autoFocus
@@ -527,6 +861,20 @@ function DashboardPage() {
                     />
                   )}
                 </div>
+                <ReminderPicker
+                  value={reminder?.reminder ?? null}
+                  early={reminder?.early ?? false}
+                  frequency={reminder?.frequency ?? null}
+                  onChange={(next) => {
+                    if (next && !due) setDue(today())
+                    setReminder(next)
+                    setTaskType(next ? 'reminder' : 'normal')
+                  }}
+                  locked={!hasPlus}
+                  onUpgrade={() => setUpgradeOpen(true)}
+                  hasDueDate={!!due}
+                  suggestedTime={time}
+                />
                 <div className="ml-auto flex items-center gap-2">
                   <button
                     type="button"
@@ -546,6 +894,11 @@ function DashboardPage() {
                   </button>
                 </div>
               </div>
+              {taskType === 'reminder' && (
+                <p className="mb-0 mt-2.5 text-[12px] text-[#667085] dark:text-[#a7b0bf]">
+                  Reminder tasks complete when reminded and cannot be used in focus sessions.
+                </p>
+              )}
               {labelOpen && (
                 <label className="mt-3 flex items-center gap-2 border-t border-[#d9dee7] pt-3 text-sm text-[#475467] dark:border-[#424242] dark:text-[#ccc]">
                   <SlidersHorizontal size={16} aria-hidden="true" /> Label
@@ -600,8 +953,28 @@ function DashboardPage() {
               ))}
             </div>
           )}
+          {view === 'today' && <TodayCalendar />}
           {view === 'reporting' ? (
-            <Report tasks={tasks} />
+            <TaskReport />
+          ) : view === 'focus' ? (
+            <FocusView
+              tasks={tasks}
+              onFocus={setFocusTask}
+              onAddTask={() => {
+                open()
+                setDue(today())
+              }}
+            />
+          ) : view === 'shared' ? (
+            <SharedProjectsView
+              projects={projectRows ?? []}
+              onOpen={(name) => go(`project:${name}`)}
+              onShare={setShareTarget}
+            />
+          ) : view === 'reminders' ? (
+            <ReminderSettings user={user} tasks={tasks} />
+          ) : view === 'calendar' ? (
+            <CalendarSettings />
           ) : view === 'help' ? (
             <div className="mt-20 max-w-[520px]">
               <h2 className="font-display text-[25px] font-semibold">
@@ -633,78 +1006,40 @@ function DashboardPage() {
                     open()
                     setDue(date)
                   }}
-                  onComplete={(task) =>
-                    setTasks((current) =>
-                      current.map((item) =>
-                        item.id === task.id
-                          ? item.repeat && item.repeat !== 'none' && item.due && !item.done
-                            ? { ...item, due: nextRepeatDate(item.due, item.repeat) }
-                            : { ...item, done: !item.done }
-                          : item,
-                      ),
-                    )
-                  }
-                  onDelete={(task) =>
-                    setTasks((current) => current.filter((item) => item.id !== task.id))
-                  }
+                  onComplete={completeTask}
+                  onDelete={(task) => setDeleteTarget({ type: 'task', task })}
                 />
+              ) : view === 'today' ? (
+                visible.length ? (
+                  <div className="border-t border-[#d9dee7] dark:border-[#383838]">
+                    {todayActiveTasks.length > 0 ? (
+                      todayActiveTasks.map(renderTaskRow)
+                    ) : (
+                      <p className="py-4 text-sm text-[#667085] dark:text-[#a7b0bf]">
+                        All active tasks completed for today.
+                      </p>
+                    )}
+                    <button
+                      className="flex cursor-pointer items-center gap-2 border-0 bg-transparent py-[13px] text-sm font-medium uppercase tracking-[0.05em] text-orange-600 dark:text-orange-400"
+                      onClick={open}
+                    >
+                      <Plus size={18} /> Add task
+                    </button>
+                    {todayCompletedTasks.length > 0 && (
+                      <div className="mt-8 border-t border-[#d9dee7] pt-5 dark:border-[#383838]">
+                        <h2 className="mb-2 text-xs font-semibold uppercase tracking-wider text-[#667085] dark:text-[#a7b0bf]">
+                          Completed · {todayCompletedTasks.length}
+                        </h2>
+                        <div>{todayCompletedTasks.map(renderTaskRow)}</div>
+                      </div>
+                    )}
+                  </div>
+                ) : adding ? null : (
+                  <Empty view={view} onAdd={open} />
+                )
               ) : visible.length ? (
                 <div className="border-t border-[#d9dee7] dark:border-[#383838]">
-                  {visible.map((t) => (
-                    <div
-                      className="group flex min-h-14 items-center gap-3 border-b border-[#d9dee7] dark:border-[#383838]"
-                      key={t.id}
-                    >
-                      <button
-                        className={`grid size-5 shrink-0 cursor-pointer place-items-center rounded-full border ${
-                          t.done
-                            ? 'border-[#c2410c] bg-[#c2410c] text-white dark:border-[#fed7aa] dark:bg-[#fed7aa] dark:text-[#1f2937]'
-                            : 'border-[#667085] bg-transparent text-white'
-                        }`}
-                        aria-label={`Complete ${t.title}`}
-                        onClick={() =>
-                          setTasks((x) =>
-                            x.map((y) =>
-                              y.id === t.id
-                                ? y.repeat && y.repeat !== 'none' && y.due && !y.done
-                                  ? { ...y, due: nextRepeatDate(y.due, y.repeat) }
-                                  : { ...y, done: !y.done }
-                                : y,
-                            ),
-                          )
-                        }
-                      >
-                        {t.done && <Check size={13} />}
-                      </button>
-                      <div className="grid flex-1 gap-[5px]">
-                        <span
-                          className={`text-sm ${
-                            t.done ? 'text-[#667085] line-through dark:text-[#a7b0bf]' : ''
-                          }`}
-                        >
-                          {t.title}
-                        </span>
-                        <small className="text-[11px] text-[#667085] dark:text-[#a7b0bf]">
-                          {[
-                            t.due && dl(t.due),
-                            t.time,
-                            t.repeat && t.repeat !== 'none' && `Repeats ${t.repeat}`,
-                            t.project,
-                            t.label,
-                          ]
-                            .filter(Boolean)
-                            .join(' · ')}
-                        </small>
-                      </div>
-                      <button
-                        className={`${dashboardIconButtonClass} text-[#667085] opacity-0 group-hover:opacity-100 focus-visible:opacity-100 dark:text-[#a7b0bf]`}
-                        aria-label={`Delete ${t.title}`}
-                        onClick={() => setTasks((x) => x.filter((y) => y.id !== t.id))}
-                      >
-                        <Trash2 size={16} />
-                      </button>
-                    </div>
-                  ))}
+                  {visible.map(renderTaskRow)}
                   <button
                     className="flex cursor-pointer items-center gap-2 border-0 bg-transparent py-[13px] text-sm font-medium uppercase tracking-[0.05em] text-orange-600 dark:text-orange-400"
                     onClick={open}
@@ -720,6 +1055,17 @@ function DashboardPage() {
         </div>
       </main>
       {upgradeOpen && <UpgradeDialog onClose={() => setUpgradeOpen(false)} />}
+      {hasPlus && <FocusPanel request={focusTask} onClose={() => setFocusTask(null)} />}
+      {shareTarget && (
+        <ShareProjectDialog
+          project={projectRows?.find((row) => row.id === shareTarget.id) ?? shareTarget}
+          onClose={() => setShareTarget(null)}
+          onLeft={() => {
+            setShareTarget(null)
+            go('inbox')
+          }}
+        />
+      )}
       {addProject && (
         <Dialog title="Add project" onClose={() => setAddProject(false)} onSubmit={createProject}>
           <input
@@ -733,6 +1079,39 @@ function DashboardPage() {
           />
         </Dialog>
       )}
+      <ConfirmDeleteDialog
+        isOpen={!!deleteTarget}
+        title={deleteTarget?.type === 'task' ? 'Delete task?' : 'Delete project?'}
+        description={
+          deleteTarget?.type === 'task' ? (
+            <>
+              Are you sure you want to delete{' '}
+              <strong className="font-semibold text-[#1f2937] dark:text-[#f3f4f6]">
+                “{deleteTarget.task.title}”
+              </strong>
+              ? This action cannot be undone.
+            </>
+          ) : deleteTarget?.type === 'project' ? (
+            <>
+              Are you sure you want to delete the project{' '}
+              <strong className="font-semibold text-[#1f2937] dark:text-[#f3f4f6]">
+                “{deleteTarget.projectName}”
+              </strong>
+              ?
+              {deleteTarget.taskCount > 0 ? (
+                <span className="mt-1.5 block text-red-600 dark:text-red-400">
+                  This will also permanently delete {deleteTarget.taskCount} task
+                  {deleteTarget.taskCount > 1 ? 's' : ''} in this project.
+                </span>
+              ) : null}
+              <span className="mt-1 block">This action cannot be undone.</span>
+            </>
+          ) : null
+        }
+        confirmLabel={deleteTarget?.type === 'task' ? 'Delete task' : 'Delete project'}
+        onClose={() => setDeleteTarget(null)}
+        onConfirm={confirmDelete}
+      />
     </div>
   )
 }
@@ -1034,37 +1413,6 @@ function Empty({ view, onAdd }: { view: DashboardView; onAdd: () => void }) {
           <Plus size={20} /> Add task
         </button>
       )}
-    </div>
-  )
-}
-function Report({ tasks }: { tasks: Task[] }) {
-  const done = tasks.filter((x) => x.done).length
-  return (
-    <div className="max-w-[600px]">
-      <p className="text-[15px] text-[#667085] dark:text-[#a7b0bf]">Your activity</p>
-      <div className="my-5 grid grid-cols-3 border-y border-[#d9dee7] dark:border-[#383838]">
-        <div className="border-r border-[#d9dee7] px-4 py-6 last:border-r-0 dark:border-[#383838]">
-          <strong className="block text-[32px] max-[900px]:text-[26px]">{tasks.length}</strong>
-          <span className="mt-1.5 block text-[13px] text-[#667085] dark:text-[#a7b0bf]">
-            Total tasks
-          </span>
-        </div>
-        <div className="border-r border-[#d9dee7] px-4 py-6 last:border-r-0 dark:border-[#383838]">
-          <strong className="block text-[32px] max-[900px]:text-[26px]">{done}</strong>
-          <span className="mt-1.5 block text-[13px] text-[#667085] dark:text-[#a7b0bf]">
-            Completed
-          </span>
-        </div>
-        <div className="border-r border-[#d9dee7] px-4 py-6 last:border-r-0 dark:border-[#383838]">
-          <strong className="block text-[32px] max-[900px]:text-[26px]">
-            {tasks.length - done}
-          </strong>
-          <span className="mt-1.5 block text-[13px] text-[#667085] dark:text-[#a7b0bf]">Open</span>
-        </div>
-      </div>
-      <p className="mt-1.5 text-[13px] text-[#667085] dark:text-[#a7b0bf]">
-        Your task totals update as you add and complete work.
-      </p>
     </div>
   )
 }

@@ -3,10 +3,9 @@ import { useEffect, useId, useRef, useState, type Ref } from 'react'
 import { BrandMark } from './BrandMark'
 
 /**
- * A front-end-only imitation of Stripe Checkout's trial subscription page.
- * Nothing entered here leaves the browser: card details live in component
- * state and are discarded when the checkout closes. Replace with a real
- * Stripe Checkout Session redirect once billing exists on the backend.
+ * A simulated Stripe Checkout trial page. Billing in Daymark is simulated: nothing is
+ * charged and no payment provider is involved. Only the card brand and last four digits
+ * are sent to the API (via `onSubscribe`); the rest is discarded when the checkout closes.
  */
 
 type CardBrand = 'visa' | 'mastercard' | 'amex' | null
@@ -24,6 +23,8 @@ type Props = {
   chargeDate: Date
   defaultEmail: string
   onBack: () => void
+  /** Records the plan; a rejection shows its message and lets the person try again. */
+  onSubscribe: (card: CardSummary) => Promise<void>
   onComplete: (card: CardSummary) => void
 }
 
@@ -96,6 +97,7 @@ export function StripeCheckout({
   chargeDate,
   defaultEmail,
   onBack,
+  onSubscribe,
   onComplete,
 }: Props) {
   const [email, setEmail] = useState(defaultEmail)
@@ -107,6 +109,7 @@ export function StripeCheckout({
   const [postal, setPostal] = useState('')
   const [errors, setErrors] = useState<Errors>({})
   const [status, setStatus] = useState<'idle' | 'processing' | 'succeeded'>('idle')
+  const [submitError, setSubmitError] = useState<string>()
   const cardErrorId = useId()
   const timers = useRef<number[]>([])
 
@@ -151,11 +154,25 @@ export function StripeCheckout({
       return
     }
     setStatus('processing')
+    setSubmitError(undefined)
     const card: CardSummary = { brand: brand ?? undefined, last4: cardDigits.slice(-4) }
-    timers.current.push(
-      window.setTimeout(() => setStatus('succeeded'), 1400),
-      window.setTimeout(() => onComplete(card), 2200),
+    // Keep a short "processing" beat so the simulation feels like a real checkout.
+    const minimumWait = new Promise((resolve) =>
+      timers.current.push(window.setTimeout(resolve, 1400)),
     )
+    Promise.all([onSubscribe(card), minimumWait])
+      .then(() => {
+        setStatus('succeeded')
+        timers.current.push(window.setTimeout(() => onComplete(card), 800))
+      })
+      .catch((error: unknown) => {
+        setStatus('idle')
+        setSubmitError(
+          error instanceof Error && error.message
+            ? error.message
+            : 'We couldn’t start your trial. Please try again.',
+        )
+      })
   }
 
   const fillTestCard = () => {
@@ -411,6 +428,7 @@ export function StripeCheckout({
               />
             )}
             <FieldError message={errors.postal} />
+            <FieldError message={submitError} />
 
             <button
               type="submit"

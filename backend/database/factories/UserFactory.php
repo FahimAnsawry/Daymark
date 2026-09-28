@@ -3,7 +3,9 @@
 namespace Database\Factories;
 
 use App\Models\Account;
+use App\Models\Subscription;
 use App\Models\User;
+use App\Plan;
 use Illuminate\Database\Eloquent\Factories\Factory;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
@@ -41,6 +43,14 @@ class UserFactory extends Factory
             'email_verified_at' => now(),
             'remember_token' => Str::random(10),
         ];
+    }
+
+    /**
+     * Give the user an active (simulated) subscription to a paid plan.
+     */
+    public function subscribed(Plan $plan = Plan::Plus): static
+    {
+        return $this->has(Subscription::factory()->state(['plan' => $plan]));
     }
 
     /**

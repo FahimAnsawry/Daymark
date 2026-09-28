@@ -2,6 +2,7 @@ import { useNavigate } from '@tanstack/react-router'
 import { Check, ShieldCheck, X } from 'lucide-react'
 import { useEffect, useId, useMemo, useRef, useState } from 'react'
 import { useAuth } from '../lib/auth-context'
+import { useSubscribe } from '../lib/billing'
 import {
   FREE_PLAN,
   PLANS,
@@ -34,6 +35,7 @@ export function UpgradeDialog({ onClose }: Props) {
   }, [step])
   const dialogRef = useRef<HTMLDivElement>(null)
   const { user } = useAuth()
+  const subscribe = useSubscribe()
   const navigate = useNavigate()
   const titleId = useId()
   const descriptionId = useId()
@@ -109,6 +111,9 @@ export function UpgradeDialog({ onClose }: Props) {
         chargeDate={chargeDate}
         defaultEmail={user?.email ?? ''}
         onBack={() => setStep('plans')}
+        onSubscribe={async (card) => {
+          await subscribe.mutateAsync({ plan: plan.id, period, card })
+        }}
         onComplete={(card) =>
           void navigate({
             to: '/checkout/success',
