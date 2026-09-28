@@ -593,7 +593,7 @@ function DashboardPage() {
               type="button"
               className={`text-left border-0 bg-transparent p-0 cursor-pointer text-sm hover:underline ${
                 done
-                  ? 'text-[#667085] line-through dark:text-[#a7b0bf]'
+                  ? 'text-[#667085] dark:text-[#a7b0bf]'
                   : 'text-[#1f2937] dark:text-[#f3f4f6]'
               }`}
               title="Click to edit task"
