@@ -8,7 +8,7 @@ A modern fullstack application architecture combining **Laravel 11+ (API & Sanct
 
 | Layer | Technology | Details |
 | :--- | :--- | :--- |
-| **Backend API** | [Laravel 11+](https://laravel.com) | RESTful API, Laravel Sanctum token & SPA cookie authentication |
+| **Backend API** | [Laravel 13](https://laravel.com) | RESTful API, Laravel Sanctum token & SPA cookie authentication |
 | **Database** | [PostgreSQL](https://www.postgresql.org) | Configured via `pgsql` driver in `backend/.env` |
 | **Frontend UI** | [React 19](https://react.dev) + TypeScript | Fast Vite SPA with strict typing and modern React architecture |
 | **Routing** | [TanStack Router v1](https://tanstack.com/router) | Fully type-safe routing with automatic file-based route generation and code splitting |
