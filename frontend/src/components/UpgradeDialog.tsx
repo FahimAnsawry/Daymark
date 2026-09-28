@@ -110,16 +110,20 @@ export function UpgradeDialog({ onClose }: Props) {
         trialDays={TRIAL_DAYS}
         chargeDate={chargeDate}
         defaultEmail={user?.email ?? ''}
+        defaultName={user?.name ?? 'Test Customer'}
         onBack={() => setStep('plans')}
         onSubscribe={async (card) => {
           await subscribe.mutateAsync({ plan: plan.id, period, card })
         }}
-        onComplete={(card) =>
-          void navigate({
+        onComplete={(card) => {
+          onClose()
+          navigate({
             to: '/checkout/success',
             search: { plan: plan.id, period, start: toDateParam(trialDays[0]), ...card },
+          }).catch((err) => {
+            console.error('Failed to navigate to checkout success:', err)
           })
-        }
+        }}
       />
     )
   }

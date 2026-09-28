@@ -22,6 +22,7 @@ type Props = {
   trialDays: number
   chargeDate: Date
   defaultEmail: string
+  defaultName?: string
   onBack: () => void
   /** Records the plan; a rejection shows its message and lets the person try again. */
   onSubscribe: (card: CardSummary) => Promise<void>
@@ -96,6 +97,7 @@ export function StripeCheckout({
   trialDays,
   chargeDate,
   defaultEmail,
+  defaultName = '',
   onBack,
   onSubscribe,
   onComplete,
@@ -104,9 +106,9 @@ export function StripeCheckout({
   const [cardNumber, setCardNumber] = useState('')
   const [expiry, setExpiry] = useState('')
   const [cvc, setCvc] = useState('')
-  const [name, setName] = useState('')
+  const [name, setName] = useState(defaultName || 'Test Customer')
   const [country, setCountry] = useState<(typeof COUNTRIES)[number]['code']>('US')
-  const [postal, setPostal] = useState('')
+  const [postal, setPostal] = useState(TEST_POSTAL['US'] ?? '10001')
   const [errors, setErrors] = useState<Errors>({})
   const [status, setStatus] = useState<'idle' | 'processing' | 'succeeded'>('idle')
   const [submitError, setSubmitError] = useState<string>()
@@ -177,12 +179,12 @@ export function StripeCheckout({
 
   const fillTestCard = () => {
     const nextYear = String((new Date().getFullYear() + 3) % 100).padStart(2, '0')
-    if (!/^\S+@\S+\.\S+$/.test(email)) setEmail('test@example.com')
+    if (!/^\S+@\S+\.\S+$/.test(email)) setEmail(defaultEmail || 'test@example.com')
     setCardNumber('4242 4242 4242 4242')
     setExpiry(`12 / ${nextYear}`)
     setCvc('123')
-    if (!name.trim()) setName('Test Customer')
-    if (!postal.trim()) setPostal(TEST_POSTAL[country] ?? '')
+    setName(defaultName || name.trim() || 'Test Customer')
+    setPostal(TEST_POSTAL[country] ?? '10001')
     setErrors({})
   }
 
@@ -376,11 +378,17 @@ export function StripeCheckout({
               </div>
             </div>
             <FieldError id={cardErrorId} message={errors.card} />
-            {!errors.card && (
-              <p className="m-0 mt-1.5 text-[12px] text-[#6d6e78]">
-                Test mode: use 4242 4242 4242 4242, any future date and any CVC.
-              </p>
-            )}
+            <p className="m-0 mt-1.5 text-[12px] text-[#6d6e78]">
+              Test mode: use 4242 4242 4242 4242, any future date and any CVC, or click{' '}
+              <button
+                type="button"
+                onClick={fillTestCard}
+                className="cursor-pointer border-0 bg-transparent p-0 font-semibold text-[#c2410c] underline hover:text-[#9a3412]"
+              >
+                Fill test card
+              </button>
+              .
+            </p>
 
             <FieldLabel htmlFor="checkout-name" className="mt-4">
               Cardholder name
