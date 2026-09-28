@@ -545,10 +545,10 @@ function DashboardPage() {
       >
         {isReminder ? (
           <div
-            className={`grid size-5 shrink-0 place-items-center rounded-full border cursor-default ${
+            className={`grid size-5 shrink-0 place-items-center ${
               done
-                ? 'border-[#c2410c] bg-[#c2410c] text-white dark:border-[#fed7aa] dark:bg-[#fed7aa] dark:text-[#1f2937]'
-                : 'border-orange-400 bg-orange-50 text-orange-600 dark:border-orange-500/50 dark:bg-orange-950/40 dark:text-orange-400'
+                ? 'rounded-full border border-[#c2410c] bg-[#c2410c] text-white dark:border-[#fed7aa] dark:bg-[#fed7aa] dark:text-[#1f2937]'
+                : 'text-orange-600 dark:text-orange-400'
             }`}
             title={
               done
@@ -561,7 +561,7 @@ function DashboardPage() {
                 : `Reminder: ${t.title}`
             }
           >
-            {done ? <Check size={13} /> : <Bell size={11} aria-hidden="true" />}
+            {done ? <Check size={13} /> : <Bell size={14} aria-hidden="true" />}
           </div>
         ) : (
           <button
@@ -590,15 +590,6 @@ function DashboardPage() {
             >
               {t.title}
             </button>
-            {isReminder && (
-              <span
-                className="inline-flex items-center gap-1 rounded bg-orange-100 px-1.5 py-0.5 text-[11px] font-medium text-orange-800 dark:bg-orange-950/60 dark:text-orange-300"
-                title="Reminder"
-              >
-                <Bell size={10} aria-hidden="true" />
-                <span>Reminder</span>
-              </span>
-            )}
           </div>
           <small className="text-[11px] text-[#667085] dark:text-[#a7b0bf]">
             {[
@@ -720,35 +711,6 @@ function DashboardPage() {
                   </option>
                 ))}
               </select>
-            )}
-            {isReminder && (
-              <ReminderPicker
-                variant="icon"
-                taskTitle={t.title}
-                value={t.reminder ?? null}
-                early={t.reminder_early ?? false}
-                frequency={t.reminder_frequency ?? null}
-                canRemove={false}
-                onChange={(next) => {
-                  if (!next?.reminder) {
-                    toast.error('Reminders cannot be removed from a reminder task.')
-                    return
-                  }
-                  updateTaskMutation.mutate({
-                    task: t,
-                    changes: {
-                      reminder: next.reminder,
-                      reminder_early: next.early ?? false,
-                      reminder_frequency: next.frequency ?? null,
-                      ...(next && !t.due && { due: today() }),
-                    },
-                  })
-                }}
-                locked={!hasPlus}
-                onUpgrade={() => setUpgradeOpen(true)}
-                hasDueDate={!!t.due}
-                suggestedTime={t.time}
-              />
             )}
             {!isReminder && (
               <button
@@ -2029,11 +1991,11 @@ function UpcomingTask({
     <div className="group flex min-w-0 items-start gap-3 rounded-lg bg-[#f7f6f2] p-3 dark:bg-[#313131]">
       {task.reminder ? (
         <div
-          className="mt-0.5 grid size-5 shrink-0 place-items-center rounded-full border border-orange-400 bg-orange-50 text-orange-600 dark:border-orange-500/50 dark:bg-orange-950/40 dark:text-orange-400 cursor-default"
+          className="mt-0.5 grid size-5 shrink-0 place-items-center text-orange-600 dark:text-orange-400"
           title="Reminder"
           aria-label={`Reminder: ${task.title}`}
         >
-          <Bell size={11} aria-hidden="true" />
+          <Bell size={14} aria-hidden="true" />
         </div>
       ) : (
         <button

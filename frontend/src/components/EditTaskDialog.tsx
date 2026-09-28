@@ -93,7 +93,7 @@ export function EditTaskDialog({
     onSave({
       title: title.trim(),
       due: due || '',
-      time: time || '',
+      time: isExistingReminderTask ? (reminder?.reminder ?? time ?? '') : (time || ''),
       project: project || '',
       label: label.trim(),
       repeat,
@@ -151,7 +151,7 @@ export function EditTaskDialog({
             />
           </div>
 
-          <div className="grid grid-cols-2 gap-3 max-[520px]:grid-cols-1">
+          {isExistingReminderTask ? (
             <div>
               <label className="mb-1.5 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-[#667085] dark:text-[#a7b0bf]">
                 <Calendar size={13} /> Due Date
@@ -163,18 +163,32 @@ export function EditTaskDialog({
                 onChange={(e) => setDue(e.target.value)}
               />
             </div>
-            <div>
-              <label className="mb-1.5 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-[#667085] dark:text-[#a7b0bf]">
-                <Clock size={13} /> Time (optional)
-              </label>
-              <input
-                type="time"
-                className="box-border h-10 w-full rounded-lg border border-[#d9dee7] bg-white px-3 text-sm text-[#1f2937] outline-none focus:border-orange-500 dark:border-[#424242] dark:bg-[#1e1e1e] dark:text-[#f2f2f2] dark:focus:border-orange-400"
-                value={time}
-                onChange={(e) => setTime(e.target.value)}
-              />
+          ) : (
+            <div className="grid grid-cols-2 gap-3 max-[520px]:grid-cols-1">
+              <div>
+                <label className="mb-1.5 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-[#667085] dark:text-[#a7b0bf]">
+                  <Calendar size={13} /> Due Date
+                </label>
+                <input
+                  type="date"
+                  className="box-border h-10 w-full rounded-lg border border-[#d9dee7] bg-white px-3 text-sm text-[#1f2937] outline-none focus:border-orange-500 dark:border-[#424242] dark:bg-[#1e1e1e] dark:text-[#f2f2f2] dark:focus:border-orange-400"
+                  value={due}
+                  onChange={(e) => setDue(e.target.value)}
+                />
+              </div>
+              <div>
+                <label className="mb-1.5 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-[#667085] dark:text-[#a7b0bf]">
+                  <Clock size={13} /> Time (optional)
+                </label>
+                <input
+                  type="time"
+                  className="box-border h-10 w-full rounded-lg border border-[#d9dee7] bg-white px-3 text-sm text-[#1f2937] outline-none focus:border-orange-500 dark:border-[#424242] dark:bg-[#1e1e1e] dark:text-[#f2f2f2] dark:focus:border-orange-400"
+                  value={time}
+                  onChange={(e) => setTime(e.target.value)}
+                />
+              </div>
             </div>
-          </div>
+          )}
 
           <div className="grid grid-cols-2 gap-3 max-[520px]:grid-cols-1">
             <div>
