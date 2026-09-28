@@ -2,41 +2,45 @@ import { useState } from 'react'
 import { createFileRoute, Link } from '@tanstack/react-router'
 import { ArrowRight, Check } from 'lucide-react'
 import { Navbar } from '../components/Navbar'
-
-type BillingPeriod = 'monthly' | 'yearly'
+import { SiteFooter } from '../components/SiteFooter'
+import {
+  FREE_PLAN,
+  PLANS as PAID_PLANS,
+  TRIAL_DAYS,
+  YEARLY_SAVING,
+  type BillingPeriod,
+} from '../lib/plans'
 
 interface PricingPlan {
   name: string
   description: string
+  /** Price per month, in whole US dollars, for each billing period. */
+  monthlyPrice: Record<BillingPeriod, number>
   recommended?: boolean
   features: string[]
 }
 
 const PLANS: PricingPlan[] = [
-  {
-    name: 'A quiet start',
-    description: 'A simple place to begin making room for what matters.',
-    features: ['Daily planning', 'Open-loop capture', 'Task organization'],
-  },
-  {
-    name: 'A steadier rhythm',
-    description: 'More room for the routines and projects that shape your days.',
-    recommended: true,
-    features: ['Daily planning', 'Open-loop capture', 'Task organization', 'Flexible daily views'],
-  },
-  {
-    name: 'A considered practice',
-    description: 'A thoughtful setup for a fuller, more intentional week.',
-    features: ['Daily planning', 'Open-loop capture', 'Task organization', 'Flexible daily views'],
-  },
+  { ...FREE_PLAN, monthlyPrice: { monthly: 0, yearly: 0 } },
+  ...PAID_PLANS.map((plan) => ({
+    name: plan.name,
+    description: plan.description,
+    monthlyPrice: plan.monthlyPrice,
+    recommended: plan.id === 'plus',
+    features: plan.features.map((feature) => feature.label),
+  })),
 ]
 
 const COMPARISON_ROWS = [
-  { label: 'Daily planning', values: ['Included', 'Included', 'Included'] },
-  { label: 'Open-loop capture', values: ['Included', 'Included', 'Included'] },
-  { label: 'Task organization', values: ['Included', 'Included', 'Included'] },
+  { label: 'Inbox and Today views', values: ['Included', 'Included', 'Included'] },
+  { label: 'Tasks and projects', values: ['Included', 'Included', 'Included'] },
+  { label: 'Unlimited projects', values: ['—', 'Included', 'Included'] },
   { label: 'Flexible daily views', values: ['—', 'Included', 'Included'] },
-  { label: 'Plan details', values: ['Coming soon', 'Coming soon', 'Coming soon'] },
+  { label: 'Upcoming planning', values: ['—', 'Included', 'Included'] },
+  { label: 'Reporting and weekly reflection', values: ['—', '—', 'Included'] },
+  { label: 'Filters and labels', values: ['—', '—', 'Included'] },
+  { label: 'Priority help', values: ['—', '—', 'Included'] },
+  { label: 'Free trial', values: ['—', `${TRIAL_DAYS} days`, `${TRIAL_DAYS} days`] },
 ]
 
 export const Route = createFileRoute('/pricing')({
@@ -44,7 +48,7 @@ export const Route = createFileRoute('/pricing')({
 })
 
 function PricingPage() {
-  const [billingPeriod, setBillingPeriod] = useState<BillingPeriod>('monthly')
+  const [billingPeriod, setBillingPeriod] = useState<BillingPeriod>('yearly')
 
   return (
     <div className="min-h-screen text-[#1f2937] dark:text-[#f3f4f6] bg-app-background transition-colors duration-250">
@@ -58,10 +62,13 @@ function PricingPage() {
           <div className="flex flex-col items-center text-center max-w-[820px] mx-auto mb-9 md:mb-[52px]">
             <h1
               id="plans-title"
-              className="m-0 mb-7 text-[#1f2937] dark:text-[#f2f4ee] font-display text-[clamp(2.7rem,5vw,4.6rem)] font-semibold tracking-[-0.04em] leading-[1.02] text-center"
+              className="m-0 mb-4 text-[#1f2937] dark:text-[#f2f4ee] font-display text-[clamp(2.7rem,5vw,4.6rem)] font-semibold tracking-[-0.04em] leading-[1.02] text-center"
             >
               Choose your plan
             </h1>
+            <p className="m-0 mb-7 max-w-[520px] text-[#667085] dark:text-[#a7b0bf] text-[0.95rem] leading-[1.55] text-balance">
+              Start free. When you want more room, try Plus or Pro free for {TRIAL_DAYS} days.
+            </p>
 
             <div className=" flex flex-col items-center gap-2.5 w-full max-w-[280px] md:max-w-none mx-auto">
               <fieldset
@@ -70,7 +77,7 @@ function PricingPage() {
               >
                 <legend className="sr-only">Billing period</legend>
                 <div
-                  className={`pointer-events-none absolute left-1 top-1 h-[calc(100%-8px)] w-[calc(50%-4px)] rounded-full bg-[#ea580c] shadow-[0_2px_8px_rgba(49,88,68,0.24)] transition-transform duration-300 ease-out dark:bg-[#fed7aa] dark:shadow-[0_2px_8px_rgba(0,0,0,0.35)] ${
+                  className={`pointer-events-none absolute left-1 top-1 h-[calc(100%-8px)] w-[calc(50%-4px)] rounded-full bg-[#c2410c] shadow-[0_2px_8px_rgba(49,88,68,0.24)] transition-transform duration-300 ease-out dark:bg-[#fed7aa] dark:shadow-[0_2px_8px_rgba(0,0,0,0.35)] ${
                     billingPeriod === 'monthly' ? 'translate-x-0' : 'translate-x-full'
                   }`}
                   aria-hidden="true"
@@ -80,7 +87,7 @@ function PricingPage() {
                     key={period}
                     className={`relative z-10 grid flex-1 min-h-[42px] place-items-center rounded-full text-[0.78rem] font-bold cursor-pointer transition-colors select-none ${
                       billingPeriod === period
-                        ? 'text-[#f7f6f2]'
+                        ? 'text-white dark:text-[#1f2937]'
                         : 'text-[#667085] dark:text-[#a7b0bf] hover:text-[#1f2937] dark:hover:text-[#f3f4f6]'
                     }`}
                   >
@@ -92,7 +99,20 @@ function PricingPage() {
                       onChange={() => setBillingPeriod(period)}
                       className="absolute opacity-0 pointer-events-none"
                     />
-                    <span>{period === 'monthly' ? 'Monthly' : 'Yearly'}</span>
+                    <span className="inline-flex items-center gap-1.5">
+                      {period === 'monthly' ? 'Monthly' : 'Yearly'}
+                      {period === 'yearly' && (
+                        <span
+                          className={`rounded-full px-1.5 py-px text-[0.62rem] font-bold transition-colors ${
+                            billingPeriod === 'yearly'
+                              ? 'bg-white/20 text-[#f7f6f2] dark:bg-[#1f2937]/12 dark:text-[#1f2937]'
+                              : 'bg-[#ea580c]/10 text-[#c2410c] dark:bg-[#fed7aa]/12 dark:text-[#fed7aa]'
+                          }`}
+                        >
+                          −{YEARLY_SAVING}%
+                        </span>
+                      )}
+                    </span>
                   </label>
                 ))}
               </fieldset>
@@ -100,7 +120,7 @@ function PricingPage() {
                 className="m-0 text-[#8b958c] dark:text-[#8a988d] text-[0.68rem] transition-opacity duration-200"
                 aria-live="polite"
               >
-                Showing {billingPeriod} preview · no charges today
+                No charge during your trial · cancel anytime
               </p>
             </div>
           </div>
@@ -117,13 +137,13 @@ function PricingPage() {
               >
                 {plan.recommended && (
                   <span className="absolute -top-3 left-6 rounded-full bg-[#1f2937] px-2.5 py-1 text-[0.62rem] font-bold tracking-[0.03em] text-[#fed7aa] dark:bg-[#1f2937] dark:text-[#fed7aa]">
-                    A considered fit
+                    Recommended
                   </span>
                 )}
                 <p
                   className={`mb-4 text-[0.66rem] font-bold tracking-[0.09em] uppercase ${plan.recommended ? 'text-[#c2410c] dark:text-[#9a3412]' : 'text-[#ea580c] dark:text-[#fb923c]'}`}
                 >
-                  Daymark plan
+                  {plan.monthlyPrice.monthly === 0 ? 'Always free' : `${TRIAL_DAYS}-day free trial`}
                 </p>
                 <h3
                   className={`m-0 mb-3 font-display text-[1.85rem] font-semibold tracking-[-0.04em] ${plan.recommended ? 'text-[#1f2937] dark:text-[#1f2937]' : 'text-[#1f2937] dark:text-[#f2f4ee]'}`}
@@ -136,26 +156,40 @@ function PricingPage() {
                   {plan.description}
                 </p>
                 <div
-                  className={`mt-7 font-display text-[1.7rem] tracking-[-0.04em] ${plan.recommended ? 'text-[#1f2937] dark:text-[#1f2937]' : 'text-[#1f2937] dark:text-[#f2f4ee]'}`}
-                  aria-label="Price coming soon"
+                  className={`mt-7 flex items-baseline gap-1.5 ${plan.recommended ? 'text-[#1f2937] dark:text-[#1f2937]' : 'text-[#1f2937] dark:text-[#f2f4ee]'}`}
                 >
-                  Coming soon
+                  <span
+                    key={billingPeriod}
+                    className="font-display text-[2.4rem] font-semibold leading-none tracking-[-0.04em] tabular-nums animate-period-fade"
+                  >
+                    ${plan.monthlyPrice[billingPeriod]}
+                  </span>
+                  <span
+                    className={`text-[0.78rem] ${plan.recommended ? 'text-[#1f2937]/65' : 'text-[#8b958c] dark:text-[#8a988d]'}`}
+                  >
+                    / month
+                  </span>
                 </div>
                 <p
                   key={billingPeriod}
-                  className={`mt-1 mb-6 text-[0.68rem] animate-period-fade ${plan.recommended ? 'text-[#1f2937]/65 dark:text-[#1f2937]/65' : 'text-[#8b958c] dark:text-[#8a988d]'}`}
+                  className={`mt-1.5 mb-6 text-[0.68rem] animate-period-fade ${plan.recommended ? 'text-[#1f2937]/65 dark:text-[#1f2937]/65' : 'text-[#8b958c] dark:text-[#8a988d]'}`}
                 >
-                  {billingPeriod === 'monthly' ? 'Monthly preview' : 'Yearly preview'}
+                  {plan.monthlyPrice.monthly === 0
+                    ? 'No card needed'
+                    : billingPeriod === 'yearly'
+                      ? `$${plan.monthlyPrice.yearly * 12} billed yearly`
+                      : `or $${plan.monthlyPrice.yearly}/mo billed yearly`}
                 </p>
                 <Link
                   className={
                     plan.recommended
-                      ? 'inline-flex min-h-[44px] items-center justify-center gap-2 rounded-full border border-[#ea580c] bg-[#ea580c] text-[0.76rem] font-bold text-white transition-all duration-200 hover:border-[#c2410c] hover:bg-[#c2410c] dark:border-[#c2410c] dark:bg-[#c2410c] dark:text-white dark:hover:border-[#9a3412] dark:hover:bg-[#9a3412] dark:hover:text-white dark:hover:-translate-y-0.5 shadow-[0_4px_16px_rgba(0,0,0,0.35)]'
-                      : 'inline-flex min-h-[44px] items-center justify-center gap-2 border border-[#ea580c] dark:border-[#fed7aa]/40 rounded-full text-[#ea580c] dark:text-[#fed7aa] bg-transparent dark:bg-[#fed7aa]/6 text-[0.76rem] font-bold transition-all duration-200 hover:text-[#f7f6f2] hover:bg-[#ea580c] dark:hover:bg-[#fed7aa] dark:hover:border-[#fed7aa] dark:hover:text-[#1f2937] dark:hover:shadow-[0_4px_14px_rgba(0,0,0,0.3)]'
+                      ? 'btn-primary-strong inline-flex min-h-[44px] items-center justify-center gap-2 rounded-full text-[0.76rem] font-bold transition-all duration-200 hover:-translate-y-0.5 shadow-[0_4px_16px_rgba(0,0,0,0.35)]'
+                      : 'inline-flex min-h-[44px] items-center justify-center gap-2 border border-[#c2410c] dark:border-[#fed7aa]/40 rounded-full text-[#c2410c] dark:text-[#fed7aa] bg-transparent dark:bg-[#fed7aa]/6 text-[0.76rem] font-bold transition-all duration-200 hover:text-white hover:bg-[#c2410c] dark:hover:bg-[#fed7aa] dark:hover:border-[#fed7aa] dark:hover:text-[#1f2937] dark:hover:shadow-[0_4px_14px_rgba(0,0,0,0.3)]'
                   }
                   to="/register"
                 >
-                  Start with Daymark <ArrowRight size={16} />
+                  {plan.monthlyPrice.monthly === 0 ? 'Start for free' : `Try ${plan.name} free`}{' '}
+                  <ArrowRight size={16} />
                 </Link>
                 <ul
                   className={`grid gap-3 mt-[30px] md:mt-auto pt-7 border-t list-none p-0 ${plan.recommended ? 'border-[#c2410c]/20 dark:border-[#c2410c]/25' : 'border-[#c7cfc2] dark:border-[#383838]'}`}
@@ -227,13 +261,15 @@ function PricingPage() {
                             : ''
                         }`}
                       >
-                        <dt className="min-w-0 text-[#4d5d51] dark:text-[#c5cec7]">
-                          {row.label}
-                        </dt>
+                        <dt className="min-w-0 text-[#4d5d51] dark:text-[#c5cec7]">{row.label}</dt>
                         <dd className="m-0 inline-flex items-center justify-end gap-1.5 text-right text-[#788279] dark:text-[#a7b0bf]">
                           {value === 'Included' ? (
                             <>
-                              <Check size={15} aria-hidden="true" className="shrink-0 text-[#64748b] dark:text-[#94a3b8]" />
+                              <Check
+                                size={15}
+                                aria-hidden="true"
+                                className="shrink-0 text-[#64748b] dark:text-[#94a3b8]"
+                              />
                               <span className="sr-only">Included</span>
                             </>
                           ) : (
@@ -296,7 +332,7 @@ function PricingPage() {
                     {row.values.map((value, index) => (
                       <td
                         className={`p-[19px_18px] border-b border-[#d4d9d0] dark:border-[#383838] text-left text-[#788279] dark:text-[#a7b0bf] [&>svg]:text-[#64748b] dark:[&>svg]:text-[#94a3b8] [&>svg]:inline-block [&>svg]:align-middle ${
-                          index === 1 ? 'bg-[#fed7aa]/40 dark:bg-[#fed7aa]/30' : ''
+                          PLANS[index].recommended ? 'bg-[#fed7aa]/40 dark:bg-[#fed7aa]/30' : ''
                         }`}
                         key={`${row.label}-${index}`}
                       >
@@ -333,7 +369,7 @@ function PricingPage() {
           </h2>
           <div className="flex flex-col items-center gap-4">
             <Link
-              className="inline-flex items-center gap-2.5 rounded-full text-[0.85rem] font-bold px-[21px] py-[15px] text-[#f7f6f2] bg-[#ea580c] hover:bg-[#c2410c] dark:text-white dark:bg-[#c2410c] dark:hover:bg-[#9a3412] dark:border dark:border-[#c2410c] dark:shadow-[0_4px_16px_rgba(0,0,0,0.3)] transition-all duration-200 hover:-translate-y-0.5"
+              className="inline-flex items-center gap-2.5 rounded-full text-[0.85rem] font-bold px-[21px] py-[15px] btn-primary-strong dark:shadow-[0_4px_16px_rgba(0,0,0,0.3)] transition-all duration-200 hover:-translate-y-0.5"
               to="/register"
             >
               Start for free <ArrowRight size={17} />
@@ -348,10 +384,7 @@ function PricingPage() {
         </section>
       </main>
 
-      <footer className="flex flex-col md:flex-row justify-between p-[23px_5vw_27px] text-[#f3f4f6]/60 bg-[#1f2937] dark:bg-app-background text-[0.68rem] gap-3 md:gap-0 [&>a]:text-[#fdba74] [&>a]:font-bold hover:[&>a]:text-white transition-colors">
-        <span>© 2026 Daymark. Made for real life.</span>
-        <a href="mailto:hello@daymark.app">Ask a question</a>
-      </footer>
+      <SiteFooter />
     </div>
   )
 }

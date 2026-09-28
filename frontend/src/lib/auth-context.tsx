@@ -38,6 +38,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const queryClient = useQueryClient()
   const [token, setToken] = useState<string | null>(() => {
     if (typeof window !== 'undefined') {
+      const urlToken = new URLSearchParams(window.location.search).get('token')
+      if (urlToken) {
+        localStorage.setItem('auth_token', urlToken)
+        return urlToken
+      }
       return localStorage.getItem('auth_token')
     }
     return null

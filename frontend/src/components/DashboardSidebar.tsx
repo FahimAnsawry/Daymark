@@ -30,6 +30,17 @@ export type DashboardView =
   | 'help'
   | 'notifications'
   | `project:${string}`
+
+/** Views other pages can open directly with `/dashboard?view=…`. */
+export const LINKABLE_VIEWS = [
+  'inbox',
+  'today',
+  'upcoming',
+  'filters',
+  'reporting',
+  'help',
+] as const satisfies readonly DashboardView[]
+export type LinkableView = (typeof LINKABLE_VIEWS)[number]
 type Props = {
   view: DashboardView
   onViewChange: (v: DashboardView) => void
@@ -38,6 +49,7 @@ type Props = {
   onAddTask: () => void
   onAddProject: () => void
   onDeleteProject: (name: string) => void
+  onTryPro: () => void
   isMobileOpen: boolean
   onCloseMobile: () => void
   isCollapsed: boolean
@@ -100,7 +112,7 @@ export function DashboardSidebar(p: Props) {
               aria-haspopup="menu"
               onClick={() => setAccountMenuOpen((x) => !x)}
             >
-              <span className="grid h-[29px] w-[29px] shrink-0 place-items-center rounded-full bg-orange-500 text-[13px] font-bold text-white dark:bg-orange-400">
+              <span className="grid h-[29px] w-[29px] shrink-0 place-items-center rounded-full bg-[#c2410c] text-[13px] font-bold text-white dark:bg-[#fed7aa] dark:text-[#1f2937]">
                 {user?.name?.[0]?.toUpperCase() || 'D'}
               </span>
               {!p.isCollapsed && (
@@ -142,7 +154,12 @@ export function DashboardSidebar(p: Props) {
                 <button
                   className={`${sidebarMenuItemClass} text-orange-600 dark:text-orange-400`}
                   role="menuitem"
-                  onClick={() => setAccountMenuOpen(false)}
+                  aria-haspopup="dialog"
+                  onClick={() => {
+                    setAccountMenuOpen(false)
+                    p.onCloseMobile()
+                    p.onTryPro()
+                  }}
                 >
                   <Sparkles size={17} /> Try Pro for free
                 </button>
@@ -160,13 +177,13 @@ export function DashboardSidebar(p: Props) {
           </div>
         </div>
         <button
-          className="flex cursor-pointer items-center gap-2 border-0 bg-transparent px-[5px] pb-[14px] pt-[5px] text-[15px] font-medium uppercase tracking-[0.05em] text-orange-600 transition-opacity duration-150 hover:opacity-[0.85] dark:text-orange-400 motion-reduce:transition-none"
+          className="flex cursor-pointer items-center gap-2 border-0 bg-transparent px-[5px] pb-[14px] pt-[5px] text-[15px] font-medium uppercase tracking-[0.05em] text-[#c2410c] transition-opacity duration-150 hover:opacity-[0.85] dark:text-[#fdba74] motion-reduce:transition-none"
           onClick={() => {
             p.onAddTask()
             p.onCloseMobile()
           }}
         >
-          <span className="grid h-[25px] w-[25px] place-items-center rounded-full bg-orange-500 text-white dark:bg-orange-400">
+          <span className="grid h-[25px] w-[25px] place-items-center rounded-full bg-[#c2410c] text-white dark:bg-[#fed7aa] dark:text-[#1f2937]">
             <Plus size={19} />
           </span>
           {!p.isCollapsed && 'Add task'}
@@ -181,6 +198,7 @@ export function DashboardSidebar(p: Props) {
                   : ''
               }`}
               aria-current={p.view === id ? 'page' : undefined}
+              aria-label={p.isCollapsed ? label : undefined}
               onClick={() => go(id)}
             >
               <Icon size={19} strokeWidth={1.7} />

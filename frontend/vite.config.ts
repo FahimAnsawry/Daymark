@@ -24,6 +24,8 @@ export default defineConfig({
   },
   server: {
     port: 5173,
+    // OAuth callbacks redirect to FRONTEND_URL (:5173); fail loudly instead of drifting to another port
+    strictPort: true,
     proxy: {
       '/api': {
         target: 'http://127.0.0.1:8000',

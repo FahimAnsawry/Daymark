@@ -20,10 +20,23 @@ import {
   Trash2,
   X,
 } from 'lucide-react'
-import { DashboardSidebar, type DashboardView } from '../components/DashboardSidebar'
+import {
+  DashboardSidebar,
+  LINKABLE_VIEWS,
+  type DashboardView,
+  type LinkableView,
+} from '../components/DashboardSidebar'
+import { LoadingPage } from '../components/LoadingPage'
+import { UpgradeDialog } from '../components/UpgradeDialog'
 import { useAuth } from '../lib/auth-context'
 import { deleteEmptyProject } from '../lib/projects'
-export const Route = createFileRoute('/dashboard')({ component: DashboardPage })
+export const Route = createFileRoute('/dashboard')({
+  component: DashboardPage,
+  validateSearch: (search: Record<string, unknown>): { view?: LinkableView } => {
+    const view = LINKABLE_VIEWS.find((v) => v === search.view)
+    return view ? { view } : {}
+  },
+})
 type Task = {
   id: string
   title: string
@@ -57,7 +70,7 @@ const nextRepeatDate = (due: string, repeat: Task['repeat']) => {
 const dashboardIconButtonClass =
   'grid size-8 cursor-pointer place-items-center rounded-md border-0 bg-transparent p-[5px] text-[#1f2937] transition-colors duration-150 hover:bg-orange-500/15 hover:text-orange-500 focus-visible:bg-orange-500/15 focus-visible:text-orange-500 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange-500 dark:text-[#f3f4f6] dark:hover:text-orange-400 dark:focus-visible:text-orange-400 dark:focus-visible:outline-orange-400 motion-reduce:transition-none'
 const dashboardPrimaryClass =
-  'inline-flex cursor-pointer items-center justify-center gap-[9px] rounded-full border-0 bg-orange-500 px-[15px] py-[9px] text-sm font-medium uppercase tracking-[0.05em] text-white transition-opacity duration-150 hover:opacity-90 dark:bg-orange-400 motion-reduce:transition-none'
+  'inline-flex cursor-pointer items-center justify-center gap-[9px] rounded-full border-0 btn-primary px-[15px] py-[9px] text-sm font-medium uppercase tracking-[0.05em] transition-colors duration-150 motion-reduce:transition-none'
 const dl = (d: string) =>
   new Date(`${d}T12:00:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
 const load = <T,>(k: string, f: T): T => {
@@ -69,15 +82,17 @@ const load = <T,>(k: string, f: T): T => {
 }
 function DashboardPage() {
   const nav = useNavigate()
+  const { view: initialView } = Route.useSearch()
   const { user, isAuthenticated, isLoading } = useAuth()
   const key = `daymark.${user?.id || 'guest'}`
-  const [view, setView] = useState<DashboardView>('inbox'),
+  const [view, setView] = useState<DashboardView>(initialView ?? 'inbox'),
     [tasks, setTasks] = useState<Task[]>(() => load(`${key}.tasks`, [])),
     [projects, setProjects] = useState<string[]>(() => load(`${key}.projects`, [])),
     [collapsed, setCollapsed] = useState(false),
     [mobile, setMobile] = useState(false),
     [adding, setAdding] = useState(false),
     [addProject, setAddProject] = useState(false),
+    [upgradeOpen, setUpgradeOpen] = useState(false),
     [draft, setDraft] = useState(''),
     [projectDraft, setProjectDraft] = useState(''),
     [due, setDue] = useState(''),
@@ -91,7 +106,12 @@ function DashboardPage() {
     [repeat, setRepeat] = useState<NonNullable<Task['repeat']>>('none'),
     [query, setQuery] = useState(''),
     [filter, setFilter] = useState(''),
-    [month, setMonth] = useState(0)
+    [calendarMonth, setCalendarMonth] = useState(() => {
+      const next = new Date()
+      next.setDate(next.getDate() + 1)
+      return new Date(next.getFullYear(), next.getMonth(), 1)
+    }),
+    [selectedDate, setSelectedDate] = useState(() => moveDate(new Date(), 1))
   const search = useRef<HTMLInputElement>(null)
   const projectTrigger = useRef<HTMLButtonElement>(null)
   const dateTrigger = useRef<HTMLButtonElement>(null)
@@ -192,9 +212,6 @@ function DashboardPage() {
     !!projectSearch.trim() &&
     !projects.some((name) => name.toLowerCase() === projectSearch.trim().toLowerCase()) &&
     projectSearch.trim().toLowerCase() !== 'inbox'
-  const base = new Date()
-  base.setDate(1)
-  base.setMonth(base.getMonth() + month)
   const heading = view.startsWith('project:')
     ? view.slice(8)
     : (
@@ -212,6 +229,14 @@ function DashboardPage() {
   const go = (v: DashboardView) => {
     setView(v)
     setMobile(false)
+  }
+  const changeUpcomingMonth = (direction: number) => {
+    const next = new Date(calendarMonth.getFullYear(), calendarMonth.getMonth() + direction, 1)
+    const tomorrow = moveDate(new Date(), 1)
+    const firstDate = localDate(next)
+    if (firstDate.slice(0, 7) < tomorrow.slice(0, 7)) return
+    setCalendarMonth(next)
+    setSelectedDate(firstDate < tomorrow ? tomorrow : firstDate)
   }
   const add = () => {
     if (!draft.trim()) return
@@ -288,7 +313,8 @@ function DashboardPage() {
     setProjects((current) => [...current, name])
     chooseProject(name)
   }
-  if (isLoading || !isAuthenticated) return null
+  if (isLoading) return <LoadingPage />
+  if (!isAuthenticated || !user) return null
   return (
     <div className="min-h-screen bg-app-background font-sans text-[#1f2937] transition-colors duration-250 dark:text-[#f3f4f6] motion-reduce:transition-none">
       <DashboardSidebar
@@ -298,13 +324,14 @@ function DashboardPage() {
         projectsWithTasks={new Set(tasks.map((task) => task.project))}
         onAddTask={open}
         onAddProject={() => setAddProject(true)}
+        onTryPro={() => setUpgradeOpen(true)}
         onDeleteProject={deleteProject}
         isMobileOpen={mobile}
         onCloseMobile={() => setMobile(false)}
         isCollapsed={collapsed}
       />
       <div
-        className={`fixed top-4 z-[35] flex items-center gap-2 max-[900px]:left-[282px] ${
+        className={`fixed top-4 z-[35] flex items-center gap-2 max-[900px]:right-4 max-[900px]:left-auto ${
           collapsed ? 'left-[76px]' : 'left-[298px]'
         }`}
       >
@@ -329,7 +356,7 @@ function DashboardPage() {
         }`}
       >
         <div className="mx-auto max-w-[920px] px-10 py-16 max-[900px]:px-[18px] max-[900px]:py-6">
-          <header className="mb-[30px] flex items-center justify-between max-[900px]:mb-6">
+          <header className="mb-[30px] flex items-center justify-between max-[900px]:mb-6 max-[900px]:justify-start max-[900px]:gap-3 max-[900px]:pr-10">
             <button
               className={`${dashboardIconButtonClass} hidden max-[900px]:grid`}
               aria-label="Open navigation"
@@ -337,28 +364,9 @@ function DashboardPage() {
             >
               <Menu size={22} />
             </button>
-            <h1 className="m-0 font-display text-[30px] font-semibold tracking-[-0.03em] max-[900px]:text-[26px]">
+            <h1 className="m-0 min-w-0 truncate font-display text-[30px] font-semibold tracking-[-0.03em] max-[900px]:text-[26px]">
               {heading}
             </h1>
-            {view === 'upcoming' && (
-              <div className="flex items-center gap-[10px] text-sm text-[#667085] dark:text-[#a7b0bf]">
-                <button
-                  className={dashboardIconButtonClass}
-                  aria-label="Previous month"
-                  onClick={() => setMonth((x) => x - 1)}
-                >
-                  <ChevronLeft size={18} />
-                </button>
-                <span>{base.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}</span>
-                <button
-                  className={dashboardIconButtonClass}
-                  aria-label="Next month"
-                  onClick={() => setMonth((x) => x + 1)}
-                >
-                  <ChevronRight size={18} />
-                </button>
-              </div>
-            )}
           </header>
           {adding && (
             <form
@@ -382,7 +390,7 @@ function DashboardPage() {
               <div className="flex flex-wrap items-center gap-[6px]">
                 <button
                   type="button"
-                  className="grid size-[35px] cursor-pointer place-items-center rounded-lg border-0 bg-[#f4f1e9] text-[#27352f] hover:bg-[#e9e5da] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange-500 dark:bg-[#484848] dark:text-[#dedede] dark:hover:bg-[#555] dark:focus-visible:outline-[#f88c93]"
+                  className="grid size-[35px] cursor-pointer place-items-center rounded-lg border-0 bg-[#f4f1e9] text-[#27352f] hover:bg-[#e9e5da] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange-500 dark:bg-[#484848] dark:text-[#dedede] dark:hover:bg-[#555] dark:focus-visible:outline-[#fed7aa]"
                   aria-label="More task options"
                   aria-expanded={labelOpen}
                   onClick={() => setLabelOpen((open) => !open)}
@@ -393,7 +401,7 @@ function DashboardPage() {
                   <button
                     ref={projectTrigger}
                     type="button"
-                    className="flex min-h-[35px] max-w-[160px] cursor-pointer items-center gap-[7px] rounded-lg border border-[#d9dee7] bg-transparent px-[10px] text-sm text-[#1f2937] hover:bg-[#f4f1e9] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange-500 dark:border-[#484848] dark:text-[#f2f2f2] dark:hover:bg-[#383838] dark:focus-visible:outline-[#f88c93]"
+                    className="flex min-h-[35px] max-w-[160px] cursor-pointer items-center gap-[7px] rounded-lg border border-[#d9dee7] bg-transparent px-[10px] text-sm text-[#1f2937] hover:bg-[#f4f1e9] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange-500 dark:border-[#484848] dark:text-[#f2f2f2] dark:hover:bg-[#383838] dark:focus-visible:outline-[#fed7aa]"
                     aria-label={`Project: ${project || 'Inbox'}`}
                     aria-haspopup="listbox"
                     aria-expanded={projectPickerOpen}
@@ -436,10 +444,14 @@ function DashboardPage() {
                             type="button"
                             role="option"
                             aria-selected={!project}
-                            className="flex min-h-10 w-full cursor-pointer items-center gap-3 rounded-lg border-0 bg-transparent px-3 text-left text-sm text-[#1f2937] hover:bg-[#f4f1e9] focus-visible:bg-[#f4f1e9] focus-visible:outline-2 focus-visible:outline-orange-500 aria-selected:bg-[#f4f1e9] dark:text-[#f2f2f2] dark:hover:bg-[#393939] dark:focus-visible:bg-[#393939] dark:focus-visible:outline-[#f88c93] dark:aria-selected:bg-[#393939]"
+                            className="flex min-h-10 w-full cursor-pointer items-center gap-3 rounded-lg border-0 bg-transparent px-3 text-left text-sm text-[#1f2937] hover:bg-[#f4f1e9] focus-visible:bg-[#f4f1e9] focus-visible:outline-2 focus-visible:outline-orange-500 aria-selected:bg-[#f4f1e9] dark:text-[#f2f2f2] dark:hover:bg-[#393939] dark:focus-visible:bg-[#393939] dark:focus-visible:outline-[#fed7aa] dark:aria-selected:bg-[#393939]"
                             onClick={() => chooseProject('')}
                           >
-                            <Inbox size={18} aria-hidden="true" className="text-[#667085] dark:text-[#d0d0d0]" />
+                            <Inbox
+                              size={18}
+                              aria-hidden="true"
+                              className="text-[#667085] dark:text-[#d0d0d0]"
+                            />
                             <span className="flex-1">Inbox</span>
                             {!project && <Check size={16} aria-hidden="true" />}
                           </button>
@@ -450,10 +462,14 @@ function DashboardPage() {
                             type="button"
                             role="option"
                             aria-selected={project === name}
-                            className="flex min-h-10 w-full cursor-pointer items-center gap-3 rounded-lg border-0 bg-transparent px-3 text-left text-sm text-[#1f2937] hover:bg-[#f4f1e9] focus-visible:bg-[#f4f1e9] focus-visible:outline-2 focus-visible:outline-orange-500 aria-selected:bg-[#f4f1e9] dark:text-[#f2f2f2] dark:hover:bg-[#393939] dark:focus-visible:bg-[#393939] dark:focus-visible:outline-[#f88c93] dark:aria-selected:bg-[#393939]"
+                            className="flex min-h-10 w-full cursor-pointer items-center gap-3 rounded-lg border-0 bg-transparent px-3 text-left text-sm text-[#1f2937] hover:bg-[#f4f1e9] focus-visible:bg-[#f4f1e9] focus-visible:outline-2 focus-visible:outline-orange-500 aria-selected:bg-[#f4f1e9] dark:text-[#f2f2f2] dark:hover:bg-[#393939] dark:focus-visible:bg-[#393939] dark:focus-visible:outline-[#fed7aa] dark:aria-selected:bg-[#393939]"
                             onClick={() => chooseProject(name)}
                           >
-                            <Inbox size={18} aria-hidden="true" className="text-[#667085] dark:text-[#d0d0d0]" />
+                            <Inbox
+                              size={18}
+                              aria-hidden="true"
+                              className="text-[#667085] dark:text-[#d0d0d0]"
+                            />
                             <span className="min-w-0 flex-1 truncate">{name}</span>
                             {project === name && <Check size={16} aria-hidden="true" />}
                           </button>
@@ -461,7 +477,7 @@ function DashboardPage() {
                         {canCreateProject && (
                           <button
                             type="button"
-                            className="flex min-h-10 w-full cursor-pointer items-center gap-3 rounded-lg border-0 bg-transparent px-3 text-left text-sm text-[#1f2937] hover:bg-[#f4f1e9] focus-visible:bg-[#f4f1e9] focus-visible:outline-2 focus-visible:outline-orange-500 dark:text-[#f2f2f2] dark:hover:bg-[#393939] dark:focus-visible:bg-[#393939] dark:focus-visible:outline-[#f88c93]"
+                            className="flex min-h-10 w-full cursor-pointer items-center gap-3 rounded-lg border-0 bg-transparent px-3 text-left text-sm text-[#1f2937] hover:bg-[#f4f1e9] focus-visible:bg-[#f4f1e9] focus-visible:outline-2 focus-visible:outline-orange-500 dark:text-[#f2f2f2] dark:hover:bg-[#393939] dark:focus-visible:bg-[#393939] dark:focus-visible:outline-[#fed7aa]"
                             onClick={createProjectFromTask}
                           >
                             <Plus size={18} aria-hidden="true" />
@@ -478,7 +494,7 @@ function DashboardPage() {
                   <button
                     ref={dateTrigger}
                     type="button"
-                    className="flex min-h-[35px] cursor-pointer items-center gap-[7px] rounded-lg border border-[#d9dee7] bg-transparent px-[10px] text-sm text-[#1f2937] hover:bg-[#f4f1e9] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange-500 dark:border-[#484848] dark:text-[#f2f2f2] dark:hover:bg-[#383838] dark:focus-visible:outline-[#f88c93]"
+                    className="flex min-h-[35px] cursor-pointer items-center gap-[7px] rounded-lg border border-[#d9dee7] bg-transparent px-[10px] text-sm text-[#1f2937] hover:bg-[#f4f1e9] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange-500 dark:border-[#484848] dark:text-[#f2f2f2] dark:hover:bg-[#383838] dark:focus-visible:outline-[#fed7aa]"
                     aria-label={`Date: ${due || 'None'}`}
                     aria-haspopup="dialog"
                     aria-expanded={datePickerOpen}
@@ -514,7 +530,7 @@ function DashboardPage() {
                 <div className="ml-auto flex items-center gap-2">
                   <button
                     type="button"
-                    className="grid size-[35px] cursor-pointer place-items-center border-0 bg-transparent text-[#667085] hover:text-[#1f2937] focus-visible:outline-2 focus-visible:outline-orange-500 dark:text-[#ccc] dark:hover:text-white dark:focus-visible:outline-[#f88c93]"
+                    className="grid size-[35px] cursor-pointer place-items-center border-0 bg-transparent text-[#667085] hover:text-[#1f2937] focus-visible:outline-2 focus-visible:outline-orange-500 dark:text-[#ccc] dark:hover:text-white dark:focus-visible:outline-[#fed7aa]"
                     aria-label="Cancel task"
                     onClick={closeAddDialog}
                   >
@@ -522,7 +538,7 @@ function DashboardPage() {
                   </button>
                   <button
                     type="submit"
-                    className="grid size-10 cursor-pointer place-items-center rounded-xl border-0 bg-orange-500 text-white hover:bg-orange-400 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange-400 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-orange-400 dark:hover:bg-orange-300"
+                    className="grid size-10 cursor-pointer place-items-center rounded-xl border-0 btn-primary disabled:cursor-not-allowed disabled:opacity-50"
                     aria-label="Add task"
                     disabled={!draft.trim()}
                   >
@@ -560,10 +576,10 @@ function DashboardPage() {
           {view === 'filters' && (
             <div className="mb-[25px] flex flex-wrap gap-2">
               <button
-                className={`rounded-full border border-[#d9dee7] px-[14px] py-[7px] text-[#1f2937] dark:border-[#383838] dark:bg-[#262626] dark:text-[#f3f4f6] ${
+                className={`cursor-pointer rounded-full border px-[14px] py-[7px] ${
                   !filter
-                    ? 'border-orange-500 bg-orange-500 text-white dark:border-orange-400 dark:bg-orange-400'
-                    : 'bg-white'
+                    ? 'btn-primary border-[#c2410c] dark:border-[#fed7aa]'
+                    : 'border-[#d9dee7] bg-white text-[#1f2937] dark:border-[#383838] dark:bg-[#262626] dark:text-[#f3f4f6]'
                 }`}
                 onClick={() => setFilter('')}
               >
@@ -572,10 +588,10 @@ function DashboardPage() {
               {labels.map((x) => (
                 <button
                   key={x}
-                  className={`rounded-full border border-[#d9dee7] px-[14px] py-[7px] text-[#1f2937] dark:border-[#383838] dark:bg-[#262626] dark:text-[#f3f4f6] ${
+                  className={`cursor-pointer rounded-full border px-[14px] py-[7px] ${
                     filter === x
-                      ? 'border-orange-500 bg-orange-500 text-white dark:border-orange-400 dark:bg-orange-400'
-                      : 'bg-white'
+                      ? 'btn-primary border-[#c2410c] dark:border-[#fed7aa]'
+                      : 'border-[#d9dee7] bg-white text-[#1f2937] dark:border-[#383838] dark:bg-[#262626] dark:text-[#f3f4f6]'
                   }`}
                   onClick={() => setFilter(x)}
                 >
@@ -601,17 +617,38 @@ function DashboardPage() {
             </div>
           ) : (
             <>
-              {view === 'upcoming' && (
-                <Calendar
-                  base={base}
-                  tasks={tasks}
-                  onAdd={(d) => {
-                    open()
-                    setDue(d)
+              {view === 'upcoming' ? (
+                <UpcomingCalendarFocus
+                  tasks={visible}
+                  month={calendarMonth}
+                  selectedDate={selectedDate}
+                  onMonthChange={changeUpcomingMonth}
+                  onSelectDate={setSelectedDate}
+                  onJumpToDate={(date) => {
+                    const selected = new Date(`${date}T12:00:00`)
+                    setCalendarMonth(new Date(selected.getFullYear(), selected.getMonth(), 1))
+                    setSelectedDate(date)
                   }}
+                  onAdd={(date) => {
+                    open()
+                    setDue(date)
+                  }}
+                  onComplete={(task) =>
+                    setTasks((current) =>
+                      current.map((item) =>
+                        item.id === task.id
+                          ? item.repeat && item.repeat !== 'none' && item.due && !item.done
+                            ? { ...item, due: nextRepeatDate(item.due, item.repeat) }
+                            : { ...item, done: !item.done }
+                          : item,
+                      ),
+                    )
+                  }
+                  onDelete={(task) =>
+                    setTasks((current) => current.filter((item) => item.id !== task.id))
+                  }
                 />
-              )}
-              {visible.length ? (
+              ) : visible.length ? (
                 <div className="border-t border-[#d9dee7] dark:border-[#383838]">
                   {visible.map((t) => (
                     <div
@@ -619,10 +656,10 @@ function DashboardPage() {
                       key={t.id}
                     >
                       <button
-                        className={`grid size-5 shrink-0 cursor-pointer place-items-center rounded-full border border-[#667085] bg-transparent text-white ${
+                        className={`grid size-5 shrink-0 cursor-pointer place-items-center rounded-full border ${
                           t.done
-                            ? 'border-orange-500 bg-orange-500 dark:border-orange-400 dark:bg-orange-400'
-                            : ''
+                            ? 'border-[#c2410c] bg-[#c2410c] text-white dark:border-[#fed7aa] dark:bg-[#fed7aa] dark:text-[#1f2937]'
+                            : 'border-[#667085] bg-transparent text-white'
                         }`}
                         aria-label={`Complete ${t.title}`}
                         onClick={() =>
@@ -682,6 +719,7 @@ function DashboardPage() {
           )}
         </div>
       </main>
+      {upgradeOpen && <UpgradeDialog onClose={() => setUpgradeOpen(false)} />}
       {addProject && (
         <Dialog title="Add project" onClose={() => setAddProject(false)} onSubmit={createProject}>
           <input
@@ -787,7 +825,9 @@ function TaskDatePicker({
           aria-invalid={invalid}
         />
         {invalid && (
-          <p className="mb-0 mt-2 text-xs text-[#b42318] dark:text-[#f4a4ab]">Use today, tomorrow, or YYYY-MM-DD.</p>
+          <p className="mb-0 mt-2 text-xs text-[#b42318] dark:text-[#f4a4ab]">
+            Use today, tomorrow, or YYYY-MM-DD.
+          </p>
         )}
       </div>
       <div className="border-b border-[#d9dee7] p-2 dark:border-[#424242]">
@@ -795,7 +835,7 @@ function TaskDatePicker({
           <button
             key={name}
             type="button"
-            className="flex min-h-10 w-full cursor-pointer items-center gap-3 rounded-lg border-0 bg-transparent px-3 text-left text-sm text-[#1f2937] hover:bg-[#f4f1e9] focus-visible:outline-2 focus-visible:outline-orange-500 dark:text-[#f2f2f2] dark:hover:bg-[#383838] dark:focus-visible:outline-[#f88c93]"
+            className="flex min-h-10 w-full cursor-pointer items-center gap-3 rounded-lg border-0 bg-transparent px-3 text-left text-sm text-[#1f2937] hover:bg-[#f4f1e9] focus-visible:outline-2 focus-visible:outline-orange-500 dark:text-[#f2f2f2] dark:hover:bg-[#383838] dark:focus-visible:outline-[#fed7aa]"
             onClick={() => onSelect(date)}
           >
             <Icon size={20} aria-hidden="true" style={{ color }} />
@@ -937,7 +977,7 @@ function TaskDateMonth({
               })}
               aria-pressed={due === date}
               data-today={date === today()}
-              className={`mx-auto grid size-8 cursor-pointer place-items-center rounded-full border-0 text-sm hover:bg-[#f4f1e9] focus-visible:outline-2 focus-visible:outline-orange-500 dark:hover:bg-[#444] dark:focus-visible:outline-[#f88c93] ${due === date ? 'bg-orange-500 text-white hover:bg-orange-500 dark:bg-[#d54b59] dark:hover:bg-[#d54b59]' : date === today() ? 'text-orange-600 dark:text-[#f07479]' : 'bg-transparent text-[#1f2937] dark:text-[#f2f2f2]'}`}
+              className={`mx-auto grid size-8 cursor-pointer place-items-center rounded-full border-0 text-sm hover:bg-[#f4f1e9] focus-visible:outline-2 focus-visible:outline-orange-500 dark:hover:bg-[#444] dark:focus-visible:outline-[#fed7aa] ${due === date ? 'bg-[#c2410c] text-white hover:bg-[#c2410c] dark:bg-[#fed7aa] dark:text-[#1f2937] dark:hover:bg-[#fed7aa]' : date === today() ? 'text-[#c2410c] dark:text-[#fdba74]' : 'bg-transparent text-[#1f2937] dark:text-[#f2f2f2]'}`}
               onClick={() => onSelect(date)}
             >
               {index + 1}
@@ -978,16 +1018,11 @@ function Empty({ view, onAdd }: { view: DashboardView; onAdd: () => void }) {
             alt=""
           />
         ) : (
-          <>
-            <span className="absolute h-[110px] w-[170px] rotate-[-7deg] rounded-[44%_56%_38%_62%] bg-[#fed7aa]/40 opacity-75" />
-            <span className="absolute bottom-[45px] left-[63px] h-4 w-[42px] rotate-[34deg] rounded-[100%_0] bg-[#64748b]" />
-            <span className="absolute bottom-[60px] right-16 h-4 w-[42px] rotate-[-38deg] rounded-[100%_0] bg-[#64748b]" />
-            <Inbox
-              className="relative z-[2] fill-[#fed7aa] stroke-orange-500 drop-shadow-[0_7px_6px_#00000038] dark:stroke-orange-400"
-              size={112}
-              strokeWidth={1.25}
-            />
-          </>
+          <img
+            className="h-[150px] w-[150px] object-contain max-[900px]:h-[132px] max-[900px]:w-[132px]"
+            src="/inbox-empty.png"
+            alt=""
+          />
         )}
       </div>
       <h2 className="m-0 mb-[9px] font-display text-lg font-semibold">{c[0]}</h2>
@@ -1033,53 +1068,253 @@ function Report({ tasks }: { tasks: Task[] }) {
     </div>
   )
 }
-function Calendar({
-  base,
+function UpcomingCalendarFocus({
   tasks,
+  month,
+  selectedDate,
+  onMonthChange,
+  onSelectDate,
+  onJumpToDate,
   onAdd,
+  onComplete,
+  onDelete,
 }: {
-  base: Date
   tasks: Task[]
-  onAdd: (d: string) => void
+  month: Date
+  selectedDate: string
+  onMonthChange: (direction: number) => void
+  onSelectDate: (date: string) => void
+  onJumpToDate: (date: string) => void
+  onAdd: (date: string) => void
+  onComplete: (task: Task) => void
+  onDelete: (task: Task) => void
 }) {
-  const first = (base.getDay() + 6) % 7
+  const tomorrow = moveDate(new Date(), 1)
+  const firstWeekday = (month.getDay() + 6) % 7
+  const daysInMonth = new Date(month.getFullYear(), month.getMonth() + 1, 0).getDate()
+  const canGoPrevious = localDate(month).slice(0, 7) > tomorrow.slice(0, 7)
+  const selected = new Date(`${selectedDate}T12:00:00`)
+  const selectedTasks = tasks
+    .filter((task) => task.due === selectedDate)
+    .sort((a, b) => (a.time || '').localeCompare(b.time || ''))
+  const later = tasks
+    .filter((task) => task.due > selectedDate)
+    .sort((a, b) => a.due.localeCompare(b.due) || (a.time || '').localeCompare(b.time || ''))
+  const taskCounts = new Map<string, number>()
+  for (const task of tasks) taskCounts.set(task.due, (taskCounts.get(task.due) || 0) + 1)
+  const selectedLabel = selected.toLocaleDateString('en-US', {
+    weekday: 'long',
+    month: 'long',
+    day: 'numeric',
+  })
+
   return (
-    <div className="mb-[30px] overflow-x-auto rounded-xl border border-[#d9dee7] bg-white/60 p-[18px] dark:border-[#383838] dark:bg-[#262626]/60 max-[900px]:overflow-auto">
-      <div className="mb-[9px] grid grid-cols-7 gap-[7px] text-xs text-[#667085] dark:text-[#a7b0bf]">
-        {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map((x) => (
-          <span key={x}>{x}</span>
-        ))}
-      </div>
-      <div className="grid grid-cols-7 gap-[7px]">
-        {Array.from({ length: first }, (_, i) => (
-          <span
-            className="relative min-h-11 rounded-[7px] bg-[#ffffff]/72 dark:bg-[#262626]/72"
-            key={`b${i}`}
-          />
-        ))}
-        {Array.from(
-          { length: new Date(base.getFullYear(), base.getMonth() + 1, 0).getDate() },
-          (_, i) => {
-            const d = `${base.getFullYear()}-${String(base.getMonth() + 1).padStart(2, '0')}-${String(i + 1).padStart(2, '0')}`
+    <div className="grid min-w-0 grid-cols-[minmax(0,1.8fr)_minmax(0,1fr)] items-start gap-5 max-[1100px]:grid-cols-1">
+      <section
+        aria-labelledby="upcoming-calendar-heading"
+        className="min-w-0 rounded-xl border border-[#d9dee7] bg-white p-5 dark:border-[#414141] dark:bg-[#262626] max-[520px]:p-3"
+      >
+        <div className="mb-6 flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h2
+              id="upcoming-calendar-heading"
+              className="m-0 font-display text-[22px] font-semibold text-[#27352f] dark:text-[#f3f4f6]"
+            >
+              {month.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
+            </h2>
+            <p className="mb-0 mt-1 text-sm text-[#59645e] dark:text-[#b6c0b8]">
+              Select a day to see its tasks
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              className={`${dashboardIconButtonClass} border border-[#d9dee7] bg-white disabled:cursor-not-allowed disabled:opacity-40 dark:border-[#484848] dark:bg-[#292929]`}
+              aria-label="Previous month"
+              disabled={!canGoPrevious}
+              onClick={() => onMonthChange(-1)}
+            >
+              <ChevronLeft size={18} aria-hidden="true" />
+            </button>
+            <button
+              className={`${dashboardIconButtonClass} border border-[#d9dee7] bg-white dark:border-[#484848] dark:bg-[#292929]`}
+              aria-label="Next month"
+              onClick={() => onMonthChange(1)}
+            >
+              <ChevronRight size={18} aria-hidden="true" />
+            </button>
+          </div>
+        </div>
+        <div className="grid grid-cols-7 gap-1.5 text-center text-xs font-medium text-[#59645e] dark:text-[#b6c0b8] max-[520px]:gap-1">
+          {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map((day) => (
+            <span key={day} className="py-1">
+              {day}
+            </span>
+          ))}
+          {Array.from({ length: firstWeekday }, (_, index) => (
+            <span key={`blank-${index}`} aria-hidden="true" />
+          ))}
+          {Array.from({ length: daysInMonth }, (_, index) => {
+            const date = new Date(month.getFullYear(), month.getMonth(), index + 1)
+            const key = localDate(date)
+            const count = taskCounts.get(key) || 0
+            const isSelected = selectedDate === key
+            const dayLabel = date.toLocaleDateString('en-US', {
+              weekday: 'long',
+              month: 'long',
+              day: 'numeric',
+            })
             return (
               <button
-                className={`relative min-h-11 cursor-pointer rounded-[7px] border-0 bg-[#ffffff]/72 text-[#1f2937] hover:bg-[#fed7aa]/40 dark:bg-[#262626]/72 dark:text-[#f3f4f6] dark:hover:bg-[#fed7aa]/40 ${
-                  d === today()
-                    ? 'bg-orange-500 text-white hover:bg-orange-500 dark:bg-orange-400'
-                    : ''
+                key={key}
+                type="button"
+                disabled={key < tomorrow}
+                aria-label={`${dayLabel}${count ? `, ${count} ${count === 1 ? 'task' : 'tasks'}` : ''}`}
+                aria-pressed={isSelected}
+                className={`flex min-h-[67px] min-w-0 cursor-pointer flex-col items-start rounded-lg border px-2.5 py-2 text-left text-sm font-medium transition-colors duration-150 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange-500 disabled:cursor-default disabled:opacity-35 dark:focus-visible:outline-orange-400 max-[520px]:min-h-[49px] max-[520px]:px-1.5 max-[520px]:py-1.5 motion-reduce:transition-none ${
+                  isSelected
+                    ? 'border-orange-500 bg-[#fff3e5] text-orange-700 dark:border-orange-400 dark:bg-orange-400/15 dark:text-orange-300'
+                    : 'border-transparent bg-[#f7f6f2] text-[#27352f] hover:border-[#d9dee7] hover:bg-[#fff3e5] dark:bg-[#313131] dark:text-[#f3f4f6] dark:hover:border-[#595959] dark:hover:bg-orange-400/15'
                 }`}
-                key={d}
-                onClick={() => onAdd(d)}
+                onClick={() => onSelectDate(key)}
               >
-                {i + 1}
-                {tasks.some((x) => x.due === d && !x.done) && (
-                  <i className="absolute bottom-[5px] left-1/2 size-[5px] -translate-x-1/2 rounded-full bg-orange-500" />
+                <span>{index + 1}</span>
+                {count > 0 && (
+                  <span
+                    className="mt-auto flex items-center gap-1 pt-1 text-[10px] leading-none text-orange-700 dark:text-orange-300"
+                    aria-hidden="true"
+                  >
+                    <span className="size-1.5 rounded-full bg-orange-500 dark:bg-orange-400" />
+                    <span className="max-[520px]:sr-only">{count}</span>
+                  </span>
                 )}
               </button>
             )
-          },
+          })}
+        </div>
+      </section>
+
+      <section
+        aria-labelledby="upcoming-selected-heading"
+        className="min-w-0 rounded-xl border border-[#d9dee7] bg-white p-5 dark:border-[#414141] dark:bg-[#262626] max-[520px]:p-4"
+      >
+        <h2
+          id="upcoming-selected-heading"
+          className={`m-0 font-display text-xl font-semibold leading-tight text-[#27352f] dark:text-[#f3f4f6] ${
+            selectedTasks.length ? '' : 'mb-5'
+          }`}
+        >
+          {selectedLabel}
+        </h2>
+        {selectedTasks.length > 0 && (
+          <p className="mb-5 mt-1 text-sm text-[#59645e] dark:text-[#b6c0b8]">
+            {selectedTasks.length} {selectedTasks.length === 1 ? 'task' : 'tasks'} planned
+          </p>
+        )}
+        <div className="grid gap-2">
+          {selectedTasks.length ? (
+            selectedTasks.map((task) => (
+              <UpcomingTask key={task.id} task={task} onComplete={onComplete} onDelete={onDelete} />
+            ))
+          ) : (
+            <p className="m-0 rounded-lg bg-[#f7f6f2] px-3 py-4 text-sm leading-6 text-[#59645e] dark:bg-[#313131] dark:text-[#b6c0b8]">
+              Nothing planned here yet.
+            </p>
+          )}
+        </div>
+        <button
+          className="mt-3 flex min-h-11 w-full cursor-pointer items-center gap-2 rounded-lg border-0 bg-[#fff3e5] px-3 text-left text-sm font-medium text-orange-700 hover:bg-[#fed7aa] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange-500 dark:bg-orange-400/15 dark:text-orange-300 dark:hover:bg-orange-400/25 dark:focus-visible:outline-orange-400"
+          aria-label={`Add task for ${selectedLabel}`}
+          onClick={() => onAdd(selectedDate)}
+        >
+          <Plus size={17} aria-hidden="true" /> Add task for this day
+        </button>
+
+        <div className="mt-7 border-t border-[#d9dee7] pt-5 dark:border-[#414141]">
+          <div className="mb-3 flex items-center justify-between gap-2">
+            <h3 className="m-0 font-display text-base font-semibold text-[#27352f] dark:text-[#f3f4f6]">
+              Coming up
+            </h3>
+            {later.length > 0 && (
+              <span className="text-xs text-[#59645e] dark:text-[#b6c0b8]">
+                {later.length} later
+              </span>
+            )}
+          </div>
+          {later.length ? (
+            <div className="max-h-64 overflow-y-auto">
+              {later.map((task) => (
+                <button
+                  key={task.id}
+                  type="button"
+                  className="flex min-h-12 w-full cursor-pointer items-start gap-3 border-0 border-b border-[#e6e8e2] bg-transparent px-0 py-2.5 text-left hover:text-orange-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange-500 dark:border-[#414141] dark:hover:text-orange-300 dark:focus-visible:outline-orange-400"
+                  aria-label={`View ${task.title} on ${dl(task.due)}`}
+                  onClick={() => onJumpToDate(task.due)}
+                >
+                  <span className="w-14 shrink-0 text-xs font-medium text-orange-700 dark:text-orange-300">
+                    {dl(task.due)}
+                  </span>
+                  <span className="min-w-0 break-words text-sm text-[#27352f] dark:text-[#f3f4f6]">
+                    {task.title}
+                  </span>
+                </button>
+              ))}
+            </div>
+          ) : (
+            <p className="m-0 text-sm leading-6 text-[#59645e] dark:text-[#b6c0b8]">
+              No tasks planned after this day.
+            </p>
+          )}
+        </div>
+      </section>
+    </div>
+  )
+}
+
+function UpcomingTask({
+  task,
+  onComplete,
+  onDelete,
+}: {
+  task: Task
+  onComplete: (task: Task) => void
+  onDelete: (task: Task) => void
+}) {
+  const details = [
+    task.time,
+    task.project,
+    task.label,
+    task.repeat && task.repeat !== 'none' && `Repeats ${task.repeat}`,
+  ].filter(Boolean)
+  return (
+    <div className="group flex min-w-0 items-start gap-3 rounded-lg bg-[#f7f6f2] p-3 dark:bg-[#313131]">
+      <button
+        className="mt-0.5 grid size-5 shrink-0 cursor-pointer place-items-center rounded-full border border-[#727b73] bg-transparent text-white hover:border-orange-600 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange-500 dark:border-[#b6c0b8] dark:hover:border-orange-400 dark:focus-visible:outline-orange-400"
+        aria-label={`Complete ${task.title}`}
+        onClick={() => onComplete(task)}
+      >
+        <Check
+          size={13}
+          className="opacity-0 group-hover:opacity-50 group-focus-within:opacity-50"
+          aria-hidden="true"
+        />
+      </button>
+      <div className="min-w-0 flex-1">
+        <p className="m-0 break-words text-sm font-medium leading-5 text-[#27352f] dark:text-[#f3f4f6]">
+          {task.title}
+        </p>
+        {details.length > 0 && (
+          <p className="mb-0 mt-1 text-xs leading-5 text-[#59645e] dark:text-[#b6c0b8]">
+            {details.join(' · ')}
+          </p>
         )}
       </div>
+      <button
+        className="grid size-7 shrink-0 cursor-pointer place-items-center rounded-md border-0 bg-transparent text-[#59645e] hover:bg-[#fff3e5] hover:text-orange-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange-500 dark:text-[#b6c0b8] dark:hover:bg-orange-400/15 dark:hover:text-orange-300 dark:focus-visible:outline-orange-400"
+        aria-label={`Delete ${task.title}`}
+        onClick={() => onDelete(task)}
+      >
+        <Trash2 size={15} aria-hidden="true" />
+      </button>
     </div>
   )
 }
@@ -1138,7 +1373,7 @@ function Dialog({
             Cancel
           </button>
           <button
-            className={`${dashboardPrimaryClass} min-w-[100px] bg-orange-500 px-[17px] py-[10px] hover:bg-orange-400 dark:bg-orange-400`}
+            className={`${dashboardPrimaryClass} min-w-[100px] px-[17px] py-[10px]`}
             type="submit"
           >
             {title}

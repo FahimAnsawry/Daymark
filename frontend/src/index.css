@@ -8,6 +8,8 @@
 
   --font-display: 'Space Grotesk', 'Arial', ui-sans-serif, system-ui, sans-serif;
   --font-sans: 'DM Sans', ui-sans-serif, system-ui, sans-serif;
+  /* The wordmark beside the sunrise mark; set in uppercase. */
+  --font-logo: 'Sora', ui-sans-serif, system-ui, sans-serif;
 
   --animate-mobile-menu-in: mobileMenuIn 220ms cubic-bezier(0.16, 1, 0.3, 1);
   --animate-period-fade: periodFade 240ms ease-out;
@@ -15,6 +17,77 @@
   --animate-dialog-fade-in: modalFadeIn 160ms ease-out;
   --animate-modal-slide-up: modalSlideUp 240ms cubic-bezier(0.16, 1, 0.3, 1);
   --animate-dialog-slide-up: modalSlideUp 200ms ease-out;
+  --animate-sun-rise: sunRise 900ms cubic-bezier(0.16, 1, 0.3, 1) 120ms both;
+  --animate-ray-in: rayIn 420ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  --animate-strip-fill: stripFill 520ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  --animate-sheet-item-in: sheetItemIn 520ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  --animate-sun-breathe: sunBreathe 2.4s ease-in-out infinite;
+  --animate-ray-pulse: rayPulse 2.4s ease-in-out infinite;
+  --animate-loading-bar: loadingBar 1.6s cubic-bezier(0.65, 0, 0.35, 1) infinite;
+
+  @keyframes sunBreathe {
+    0%,
+    100% {
+      transform: translateY(2px) scale(0.96);
+      filter: drop-shadow(0 0 2px rgba(249, 115, 22, 0.2));
+    }
+    50% {
+      transform: translateY(-3px) scale(1.04);
+      filter: drop-shadow(0 0 14px rgba(249, 115, 22, 0.65));
+    }
+  }
+
+  @keyframes rayPulse {
+    0%,
+    100% {
+      opacity: 0.3;
+      transform: scale(0.85);
+      stroke: #ea580c;
+    }
+    50% {
+      opacity: 1;
+      transform: scale(1.18);
+      stroke: #f97316;
+    }
+  }
+
+  @keyframes loadingBar {
+    0% {
+      transform: translateX(-100%);
+    }
+    50% {
+      transform: translateX(100%);
+    }
+    100% {
+      transform: translateX(300%);
+    }
+  }
+
+  @keyframes sheetItemIn {
+    from {
+      opacity: 0;
+      transform: translateY(6px);
+    }
+  }
+
+  @keyframes sunRise {
+    from {
+      transform: translateY(100%);
+    }
+  }
+
+  @keyframes rayIn {
+    from {
+      opacity: 0;
+      transform: scale(0.4);
+    }
+  }
+
+  @keyframes stripFill {
+    from {
+      transform: scaleX(0);
+    }
+  }
 
   @keyframes mobileMenuIn {
     from {
@@ -63,12 +136,105 @@
   --color-app-background: #1f1f1f;
 }
 
+/*
+ * Button color system. Every filled call to action uses one of these two, so the
+ * primary action reads the same on every page. Size, radius and motion stay with
+ * each button; only color, hover and focus live here.
+ *
+ * btn-primary: on paper and light surfaces. Burnt orange #c2410c keeps white label
+ * text at AA (5.2:1); #ea580c does not. In dark mode it becomes soft orange.
+ * btn-primary-strong: on soft-orange surfaces, burnt orange in both themes.
+ * btn-primary-inverse: on botanical green, dark panels and photography, in both themes.
+ */
+@utility btn-primary {
+  background-color: #c2410c;
+  color: #ffffff;
+
+  &:hover:not(:disabled) {
+    background-color: #9a3412;
+  }
+
+  &:focus-visible {
+    outline: 2px solid #c2410c;
+    outline-offset: 3px;
+  }
+
+  &:where(.dark, .dark *) {
+    background-color: #fed7aa;
+    color: #1f2937;
+
+    &:hover:not(:disabled) {
+      background-color: #fdba74;
+    }
+
+    &:focus-visible {
+      outline-color: #fed7aa;
+    }
+  }
+}
+
+/* On soft-orange surfaces that stay #fed7aa in both themes (pricing highlights). */
+@utility btn-primary-strong {
+  background-color: #c2410c;
+  color: #ffffff;
+
+  &:hover:not(:disabled) {
+    background-color: #9a3412;
+  }
+
+  &:focus-visible {
+    outline: 2px solid #9a3412;
+    outline-offset: 3px;
+  }
+}
+
+@utility btn-primary-inverse {
+  background-color: #fed7aa;
+  color: #1f2937;
+
+  &:hover:not(:disabled) {
+    background-color: #fdba74;
+  }
+
+  &:focus-visible {
+    outline: 2px solid #fed7aa;
+    outline-offset: 3px;
+  }
+}
+
 @layer base {
+  html {
+    scrollbar-color: #c7cfc2 transparent;
+  }
+
+  :root.dark {
+    scrollbar-color: #424242 transparent;
+  }
+
   @media (prefers-reduced-motion: reduce) {
     *,
     *::before,
     *::after {
       @apply scroll-auto transition-none animate-none;
+    }
+  }
+}
+
+@layer components {
+  /* Ruled link columns in the shared SiteFooter. */
+  .footer-column {
+    @apply flex flex-col items-start pt-4 border-t border-white/15;
+
+    & > h3 {
+      @apply m-0 mb-4 text-[0.86rem] font-bold text-[#f7f6f2];
+    }
+
+    & > a:not(.footer-cta) {
+      @apply mb-2.5 text-[0.92rem] text-[#a3aca5] underline-offset-4 decoration-[#fdba74] transition-colors hover:text-[#f7f6f2] hover:underline;
+    }
+
+    & > a:focus-visible {
+      @apply rounded-sm outline-2 outline-offset-4 outline-[#fed7aa];
     }
   }
 }

@@ -1,14 +1,16 @@
-import { useEffect, useState } from 'react'
-import { ArrowLeft, Check, Eye, EyeOff, LogIn } from 'lucide-react'
+import { useEffect, useState, type ReactNode } from 'react'
+import { ArrowLeft, ArrowRight, CircleAlert, Eye, EyeOff, LoaderCircle } from 'lucide-react'
 import { Link, useNavigate } from '@tanstack/react-router'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useForm, type SubmitHandler } from 'react-hook-form'
 import { z } from 'zod'
 import { api } from '../lib/api'
 import { useAuth } from '../lib/auth-context'
+import { AuthDayPreview } from './AuthDayPreview'
 import { BrandMark } from './BrandMark'
 import { GoogleIcon } from './GoogleIcon'
 import { LegalModal, type LegalModalType } from './LegalModal'
+import { LoadingPage } from './LoadingPage'
 import { ThemeToggle } from './ThemeToggle'
 import toast from 'react-hot-toast'
 
@@ -45,6 +47,12 @@ export function AuthPage({ mode }: AuthPageProps) {
   const isLogin = mode === 'login'
   const [showPassword, setShowPassword] = useState(false)
   const [isGoogleLoading, setIsGoogleLoading] = useState(false)
+  const [hasOAuthToken, setHasOAuthToken] = useState(() => {
+    if (typeof window !== 'undefined') {
+      return Boolean(new URLSearchParams(window.location.search).get('token'))
+    }
+    return false
+  })
   const [error, setError] = useState(() => {
     if (typeof window !== 'undefined') {
       return new URLSearchParams(window.location.search).get('error') || ''
@@ -96,11 +104,20 @@ export function AuthPage({ mode }: AuthPageProps) {
 
     if (token) {
       window.history.replaceState({}, document.title, window.location.pathname)
-      login(token).then(() => {
-        navigate({ to: '/dashboard', replace: true })
-      })
+      login(token)
+        .then(() => {
+          navigate({ to: '/dashboard', replace: true })
+        })
+        .catch(() => {
+          setHasOAuthToken(false)
+          setError('Failed to sign in with Google. Please try again.')
+          toast.error('Failed to sign in with Google. Please try again.')
+        })
     } else if (oauthError) {
       window.history.replaceState({}, document.title, window.location.pathname)
+      setHasOAuthToken(false)
+      setError(oauthError)
+      toast.error(oauthError)
     }
   }, [login, navigate])
 
@@ -158,226 +175,263 @@ export function AuthPage({ mode }: AuthPageProps) {
     }
   }
 
-  return (
-    <main className="flex flex-col justify-start items-center lg:grid lg:grid-cols-[minmax(0,1.12fr)_minmax(400px,0.88fr)] min-h-screen min-h-dvh text-[#172320] dark:text-[#f3f4f6] bg-app-background p-[18px_18px_28px] lg:p-0 transition-colors duration-250">
-      <div
-        className="hidden lg:grid relative self-center h-[calc(100dvh-80px)] max-h-[640px] min-h-[440px] overflow-hidden place-items-center isolate m-7 border border-[#2c4736]/20 rounded-[28px] bg-[#183b37] before:absolute before:inset-0 before:rounded-[inherit] before:-z-20 before:bg-[url('https://images.unsplash.com/photo-1456324504439-367cee3b3c32?auto=format&fit=crop&w=1800&q=85')] before:bg-cover before:bg-center before:scale-[1.015] after:absolute after:inset-0 after:rounded-[inherit] after:-z-10 after:bg-[linear-gradient(102deg,rgba(14,49,45,0.9)_0%,rgba(14,49,45,0.62)_36%,rgba(11,36,36,0.08)_74%),linear-gradient(180deg,rgba(8,27,28,0.38),transparent_45%,rgba(8,27,28,0.45)),linear-gradient(transparent_55%,rgba(11,36,36,0.74))]"
-        aria-hidden="true"
-      />
+  if (hasOAuthToken || isAuthenticated || (isLoading && !error)) {
+    return <LoadingPage />
+  }
 
+  return (
+    <main className="min-h-dvh bg-[#FFFFFF] text-[#27352f] caret-[#ea580c] selection:bg-[#fed7aa] selection:text-[#1f2937] transition-colors duration-250 lg:grid lg:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)] dark:bg-app-background dark:text-[#f3f4f6]">
       <section
-        className="flex flex-col justify-center w-full max-w-[400px] lg:w-[min(420px,84%)] min-h-auto lg:min-h-dvh py-2 lg:py-5.5 mx-auto"
+        className="flex min-h-dvh flex-col px-5 py-5 sm:px-10 lg:px-[clamp(40px,5vw,72px)] lg:py-7"
         aria-labelledby="auth-title"
       >
-        <div className="flex items-center justify-between w-full mb-4.5 lg:mb-6">
+        <div className="flex items-center justify-between">
           <Link
-            className="inline-flex items-center gap-1.5 text-[#667085] dark:text-[#a7b0bf] hover:text-[#ea580c] dark:hover:text-[#fb923c] text-[0.75rem] transition-colors"
+            className="inline-flex items-center gap-1.5 rounded-full py-1 text-[0.8rem] text-[#5d6a62] transition-colors hover:text-[#c2410c] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#ea580c] dark:text-[#a7b0bf] dark:hover:text-[#fb923c]"
             to="/"
           >
-            <ArrowLeft size={15} /> Back to Daymark
+            <ArrowLeft size={15} aria-hidden="true" /> Back to Daymark
           </Link>
           <ThemeToggle variant="light" />
         </div>
 
-        <div className="group inline-flex items-center gap-[9px] mb-4.5 lg:mb-6.5 text-[#28382f] dark:text-[#f3f4f6] text-[0.84rem] font-bold tracking-[0.12em]">
-          <BrandMark />
-          <span>DAYMARK</span>
-        </div>
+        <div className="mx-auto flex w-full max-w-[420px] flex-1 flex-col justify-center py-8">
+          <div className="group mb-7 inline-flex items-center gap-2.5 font-logo text-[0.84rem] font-bold tracking-[0.08em] text-[#28382f] dark:text-[#f3f4f6]">
+            <BrandMark />
+            <span>DAYMARK</span>
+          </div>
 
-        <div className="mb-4 lg:mb-4.5">
-          {isLogin && (
-            <p className="mb-1 lg:mb-2.5 text-[#ea580c] dark:text-[#fb923c] text-[0.72rem] font-bold tracking-[0.08em] uppercase">
-              Welcome back
-            </p>
-          )}
           <h1
             id="auth-title"
-            className="mb-2.5 text-[#1c2a24] dark:text-[#f2f4ee] font-display text-[clamp(1.85rem,6vw,2.9rem)] font-semibold tracking-[-0.04em] leading-[0.98]"
+            className="m-0 mb-7 font-display text-[clamp(2rem,4.2vw,2.6rem)] font-semibold leading-[1.02] tracking-[-0.035em] text-balance text-[#1c2a24] dark:text-[#f2f4ee]"
           >
             {isLogin ? 'Sign in to your account' : 'Create your account'}
           </h1>
-        </div>
 
-        <button
-          className="flex w-full items-center justify-center gap-2.5 h-[45px] border border-[#d4dbd2] dark:border-[#383838] rounded-[2px] bg-app-background text-[#28382f] dark:text-[#f3f4f6] text-[0.8rem] font-bold cursor-pointer transition-all duration-200 hover:border-[#8b9b8d] dark:hover:border-[#4d4d4d] hover:-translate-y-0.5 shadow-[0_1px_2px_rgba(0,0,0,0.04)] disabled:opacity-60 disabled:cursor-wait"
-          type="button"
-          onClick={handleGoogleAuth}
-          disabled={isGoogleLoading}
-        >
-          <GoogleIcon size={18} />
-          <span>
-            {isGoogleLoading
-              ? 'Connecting to Google…'
-              : isLogin
-                ? 'Continue with Google'
-                : 'Sign up with Google'}
-          </span>
-        </button>
-
-        <div className="flex items-center gap-3.5 my-3.5 text-[#9ba59e] dark:text-[#79877d] text-[0.67rem] before:h-px before:flex-1 before:bg-[#dfe4dd] dark:before:bg-[#333333] after:h-px after:flex-1 after:bg-[#dfe4dd] dark:after:bg-[#333333]">
-          <span>or use your email</span>
-        </div>
-
-        <form className="grid gap-3" onSubmit={handleSubmit(onSubmit)} noValidate>
-          {!isLogin && (
-            <label className="grid gap-1.5 text-[#435249] dark:text-[#c5cec7] text-[0.71rem] font-bold">
-              Full name
-              <input
-                {...register('name')}
-                autoComplete="name"
-                aria-invalid={errors.name ? 'true' : 'false'}
-                className="w-full h-[42px] border border-[#d9dee7] dark:border-[#383838] rounded-[2px] px-3 text-[#203028] dark:text-[#f3f4f6] bg-white/75 dark:bg-app-background text-[0.84rem] font-normal outline-none transition-all duration-200 focus:border-[#64748b] dark:focus:border-[#94a3b8] focus:ring-2 focus:ring-[#64748b]/20 dark:focus:ring-[#94a3b8]/20 aria-[invalid=true]:border-[#ea580c] dark:aria-[invalid=true]:border-[#fb923c]"
-              />
-              {errors.name && (
-                <span
-                  className="text-[#c2410c] dark:text-[#fb923c] text-[0.68rem] font-semibold leading-tight"
-                  role="alert"
-                >
-                  {errors.name.message}
-                </span>
-              )}
-            </label>
-          )}
-
-          <label className="grid gap-1.5 text-[#435249] dark:text-[#c5cec7] text-[0.71rem] font-bold">
-            Email address
-            <input
-              type="email"
-              {...register('email')}
-              autoComplete="email"
-              aria-invalid={errors.email ? 'true' : 'false'}
-              className="w-full h-[42px] border border-[#d9dee7] dark:border-[#383838] rounded-[2px] px-3 text-[#203028] dark:text-[#f3f4f6] bg-white/75 dark:bg-app-background text-[0.84rem] font-normal outline-none transition-all duration-200 focus:border-[#64748b] dark:focus:border-[#94a3b8] focus:ring-2 focus:ring-[#64748b]/20 dark:focus:ring-[#94a3b8]/20 aria-[invalid=true]:border-[#ea580c] dark:aria-[invalid=true]:border-[#fb923c]"
-            />
-            {errors.email && (
-              <span
-                className="text-[#c2410c] dark:text-[#fb923c] text-[0.68rem] font-semibold leading-tight"
-                role="alert"
-              >
-                {errors.email.message}
-              </span>
-            )}
-          </label>
-
-          <label className="grid gap-1.5 text-[#435249] dark:text-[#c5cec7] text-[0.71rem] font-bold">
-            Password
-            <span className="relative block">
-              <input
-                type={showPassword ? 'text' : 'password'}
-                {...register('password')}
-                autoComplete={isLogin ? 'current-password' : 'new-password'}
-                aria-invalid={errors.password ? 'true' : 'false'}
-                className="w-full h-[42px] border border-[#d9dee7] dark:border-[#383838] rounded-[2px] px-3 pr-10 text-[#203028] dark:text-[#f3f4f6] bg-white/75 dark:bg-app-background text-[0.84rem] font-normal outline-none transition-all duration-200 focus:border-[#64748b] dark:focus:border-[#94a3b8] focus:ring-2 focus:ring-[#64748b]/20 dark:focus:ring-[#94a3b8]/20 aria-[invalid=true]:border-[#ea580c] dark:aria-[invalid=true]:border-[#fb923c]"
-              />
-              <button
-                type="button"
-                className="absolute top-0 right-0 grid w-[42px] h-[42px] place-items-center border-0 text-[#718077] dark:text-[#a7b0bf] hover:text-[#203028] dark:hover:text-[#f3f4f6] bg-transparent cursor-pointer transition-colors"
-                onClick={() => setShowPassword(!showPassword)}
-                aria-label={showPassword ? 'Hide password' : 'Show password'}
-              >
-                {showPassword ? <EyeOff size={17} /> : <Eye size={17} />}
-              </button>
-            </span>
-            {errors.password && (
-              <span
-                className="text-[#c2410c] dark:text-[#fb923c] text-[0.68rem] font-semibold leading-tight"
-                role="alert"
-              >
-                {errors.password.message}
-              </span>
-            )}
-          </label>
-
-          {!isLogin && (
-            <label className="grid gap-1.5 text-[#435249] dark:text-[#c5cec7] text-[0.71rem] font-bold">
-              Confirm password
-              <input
-                type={showPassword ? 'text' : 'password'}
-                {...register('passwordConfirmation')}
-                autoComplete="new-password"
-                aria-invalid={errors.passwordConfirmation ? 'true' : 'false'}
-                className="w-full h-[42px] border border-[#d9dee7] dark:border-[#383838] rounded-[2px] px-3 text-[#203028] dark:text-[#f3f4f6] bg-white/75 dark:bg-app-background text-[0.84rem] font-normal outline-none transition-all duration-200 focus:border-[#64748b] dark:focus:border-[#94a3b8] focus:ring-2 focus:ring-[#64748b]/20 dark:focus:ring-[#94a3b8]/20 aria-[invalid=true]:border-[#ea580c] dark:aria-[invalid=true]:border-[#fb923c]"
-              />
-              {errors.passwordConfirmation && (
-                <span
-                  className="text-[#c2410c] dark:text-[#fb923c] text-[0.68rem] font-semibold leading-tight"
-                  role="alert"
-                >
-                  {errors.passwordConfirmation.message}
-                </span>
-              )}
-            </label>
-          )}
-
-          {isLogin && (
-            <Link
-              className="self-end -mt-1.5 text-[#64748b] dark:text-[#94a3b8] hover:text-[#ea580c] dark:hover:text-[#fb923c] text-[0.7rem] transition-colors"
-              to="/login"
-            >
-              Forgot your password?
-            </Link>
-          )}
-
-          {!isLogin && (
-            <div
-              className="flex items-center gap-2.5 py-1 my-1 bg-transparent"
-              role="note"
-              aria-label="Terms and Privacy Notice"
-            >
-              <div
-                className="grid place-items-center w-[22px] h-[22px] shrink-0 rounded-full bg-[#28543d]/12 dark:bg-[#94a3b8]/16 text-[#244e38] dark:text-[#94a3b8]"
-                aria-hidden="true"
-              >
-                <Check size={14} strokeWidth={2.6} />
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="m-0 text-[#203127] dark:text-[#d1ded5] text-[0.77rem] leading-[1.45] font-medium">
-                  By continuing, you agree to our{' '}
-                  <button
-                    type="button"
-                    onClick={() => setLegalModal('terms')}
-                    className="inline p-0 m-0 bg-transparent border-0 font-bold text-[#1f2937] dark:text-[#94a3b8] underline underline-offset-[2.5px] decoration-[1.5px] decoration-[#1f2937]/40 dark:decoration-[#94a3b8]/45 cursor-pointer transition-colors hover:text-[#ea580c] dark:hover:text-[#fb923c] hover:decoration-[#ea580c] dark:hover:decoration-[#fb923c] focus-visible:outline-2 focus-visible:outline-[#ea580c] focus-visible:outline-offset-2"
-                  >
-                    Terms
-                  </button>{' '}
-                  and{' '}
-                  <button
-                    type="button"
-                    onClick={() => setLegalModal('privacy')}
-                    className="inline p-0 m-0 bg-transparent border-0 font-bold text-[#1f2937] dark:text-[#94a3b8] underline underline-offset-[2.5px] decoration-[1.5px] decoration-[#1f2937]/40 dark:decoration-[#94a3b8]/45 cursor-pointer transition-colors hover:text-[#ea580c] dark:hover:text-[#fb923c] hover:decoration-[#ea580c] dark:hover:decoration-[#fb923c] focus-visible:outline-2 focus-visible:outline-[#ea580c] focus-visible:outline-offset-2"
-                  >
-                    Privacy Policy
-                  </button>
-                  .
-                </p>
-              </div>
-            </div>
-          )}
-
-          {error && (
-            <p
-              className="-mt-1 p-[10px_12px] border-l-2 border-[#ea580c] dark:border-l-[#fb923c] text-[#c2410c] dark:text-[#fed7aa] bg-[#fff7ed] dark:bg-[#2c1612] text-[0.75rem] leading-[1.35]"
-              role="alert"
-            >
-              {error}
-            </p>
-          )}
           <button
-            className="flex w-full min-h-[44px] items-center justify-center gap-2.5 mt-0.5 border border-[#1f2937] dark:border-[#fed7aa] rounded-[2px] text-white dark:text-[#1f2937] bg-[#1f2937] dark:bg-[#fed7aa] text-[0.8rem] font-bold cursor-pointer transition-all duration-200 hover:not-disabled:bg-[#c2410c] dark:hover:not-disabled:bg-[#ffedd5] hover:not-disabled:-translate-y-0.5 disabled:opacity-65 disabled:cursor-wait"
-            type="submit"
-            disabled={isSubmitting}
+            className="flex h-12 w-full cursor-pointer items-center justify-center gap-2.5 rounded-full border border-[#d4dbd2] bg-white text-[0.88rem] font-semibold text-[#28382f] transition-[border-color,background-color,transform] duration-200 hover:border-[#9aa69d] hover:bg-[#fbfbf9] active:scale-[0.99] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#ea580c] disabled:cursor-wait disabled:opacity-60 dark:border-[#383838] dark:bg-[#262626] dark:text-[#f3f4f6] dark:hover:border-[#4d4d4d] dark:hover:bg-[#2b2b2b]"
+            type="button"
+            onClick={handleGoogleAuth}
+            disabled={isGoogleLoading}
           >
-            {isSubmitting ? 'Please wait…' : isLogin ? 'Sign in' : 'Create account'}{' '}
-            <LogIn size={16} />
+            {isGoogleLoading ? (
+              <LoaderCircle size={18} className="animate-spin" aria-hidden="true" />
+            ) : (
+              <GoogleIcon size={18} />
+            )}
+            <span>
+              {isGoogleLoading
+                ? 'Connecting to Google…'
+                : isLogin
+                  ? 'Continue with Google'
+                  : 'Sign up with Google'}
+            </span>
           </button>
-        </form>
 
-        <p className="mt-3.5 text-[#667085] dark:text-[#a7b0bf] text-[0.72rem] text-center [&>a]:text-[#64748b] dark:[&>a]:text-[#94a3b8] [&>a]:font-bold hover:[&>a]:text-[#ea580c] dark:hover:[&>a]:text-[#fb923c]">
-          {isLogin ? 'Don’t have an account?' : 'Already have an account?'}{' '}
-          <Link to={isLogin ? '/register' : '/login'}>{isLogin ? 'Create one' : 'Sign in'}</Link>
-        </p>
+          <div className="my-6 flex items-center gap-3.5 text-[0.75rem] text-[#5d6a62] before:h-px before:flex-1 before:bg-[#dfe4dd] after:h-px after:flex-1 after:bg-[#dfe4dd] dark:text-[#8b929c] dark:before:bg-[#333333] dark:after:bg-[#333333]">
+            <span>or use your email</span>
+          </div>
+
+          <form className="grid gap-4" onSubmit={handleSubmit(onSubmit)} noValidate>
+            {!isLogin && (
+              <Field id="auth-name" label="Full name" error={errors.name?.message}>
+                <input
+                  id="auth-name"
+                  aria-describedby={errors.name ? 'auth-name-error' : undefined}
+                  {...register('name')}
+                  autoComplete="name"
+                  aria-invalid={errors.name ? 'true' : 'false'}
+                  className={inputClass}
+                />
+              </Field>
+            )}
+
+            <Field id="auth-email" label="Email address" error={errors.email?.message}>
+              <input
+                id="auth-email"
+                aria-describedby={errors.email ? 'auth-email-error' : undefined}
+                type="email"
+                {...register('email')}
+                autoComplete="email"
+                placeholder="you@example.com"
+                aria-invalid={errors.email ? 'true' : 'false'}
+                className={inputClass}
+              />
+            </Field>
+
+            <Field
+              id="auth-password"
+              label="Password"
+              error={errors.password?.message}
+              aside={
+                isLogin ? (
+                  <button
+                    type="button"
+                    className="cursor-pointer rounded border-0 bg-transparent p-0 text-[0.78rem] font-medium text-[#5d6a62] underline-offset-[3px] transition-colors hover:text-[#c2410c] hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#ea580c] dark:text-[#a7b0bf] dark:hover:text-[#fb923c]"
+                    onClick={() => toast('Password reset isn’t available yet.')}
+                  >
+                    Forgot your password?
+                  </button>
+                ) : undefined
+              }
+            >
+              <span className="relative block">
+                <input
+                  id="auth-password"
+                  aria-describedby={errors.password ? 'auth-password-error' : undefined}
+                  type={showPassword ? 'text' : 'password'}
+                  {...register('password')}
+                  autoComplete={isLogin ? 'current-password' : 'new-password'}
+                  aria-invalid={errors.password ? 'true' : 'false'}
+                  className={`${inputClass} pr-12`}
+                />
+                <button
+                  type="button"
+                  className="absolute top-0 right-0 grid h-12 w-12 cursor-pointer place-items-center rounded-r-[10px] border-0 bg-transparent text-[#5d6a62] transition-colors hover:text-[#1c2a24] focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-[#ea580c] dark:text-[#a7b0bf] dark:hover:text-[#f3f4f6]"
+                  onClick={() => setShowPassword(!showPassword)}
+                  aria-label={showPassword ? 'Hide password' : 'Show password'}
+                  aria-pressed={showPassword}
+                >
+                  {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                </button>
+              </span>
+            </Field>
+
+            {!isLogin && (
+              <Field
+                id="auth-password-confirmation"
+                label="Confirm password"
+                error={errors.passwordConfirmation?.message}
+              >
+                <input
+                  id="auth-password-confirmation"
+                  aria-describedby={
+                    errors.passwordConfirmation ? 'auth-password-confirmation-error' : undefined
+                  }
+                  type={showPassword ? 'text' : 'password'}
+                  {...register('passwordConfirmation')}
+                  autoComplete="new-password"
+                  aria-invalid={errors.passwordConfirmation ? 'true' : 'false'}
+                  className={inputClass}
+                />
+              </Field>
+            )}
+
+            {error && (
+              <p
+                className="m-0 flex items-start gap-2.5 rounded-[10px] border border-[#fdba74] bg-[#fff7ed] px-3.5 py-3 text-[0.84rem] leading-[1.4] text-[#9a3412] dark:border-[#7c2d12] dark:bg-[#2c1612] dark:text-[#fed7aa]"
+                role="alert"
+              >
+                <CircleAlert size={17} className="mt-px shrink-0" aria-hidden="true" />
+                <span>{error}</span>
+              </p>
+            )}
+
+            <button
+              className="mt-2 flex h-12 w-full cursor-pointer items-center justify-center gap-2 rounded-full border-0 btn-primary text-[0.9rem] font-semibold transition-[background-color,transform] duration-200 active:not-disabled:scale-[0.99] disabled:cursor-wait disabled:opacity-70"
+              type="submit"
+              disabled={isSubmitting}
+            >
+              {isSubmitting ? (
+                <>
+                  <LoaderCircle size={17} className="animate-spin" aria-hidden="true" />
+                  {isLogin ? 'Signing in…' : 'Creating your account…'}
+                </>
+              ) : (
+                <>
+                  {isLogin ? 'Sign in' : 'Create account'}
+                  <ArrowRight size={17} aria-hidden="true" />
+                </>
+              )}
+            </button>
+
+            {!isLogin && (
+              <p className="m-0 text-center text-[0.8rem] leading-[1.5] text-[#5d6a62] dark:text-[#a7b0bf]">
+                By continuing, you agree to our{' '}
+                <button
+                  type="button"
+                  onClick={() => setLegalModal('terms')}
+                  className={legalLinkClass}
+                >
+                  Terms
+                </button>{' '}
+                and{' '}
+                <button
+                  type="button"
+                  onClick={() => setLegalModal('privacy')}
+                  className={legalLinkClass}
+                >
+                  Privacy Policy
+                </button>
+                .
+              </p>
+            )}
+          </form>
+
+          <p className="m-0 mt-7 text-center text-[0.86rem] text-[#5d6a62] dark:text-[#a7b0bf]">
+            {isLogin ? 'Don’t have an account?' : 'Already have an account?'}{' '}
+            <Link
+              className="rounded font-semibold text-[#183b37] underline decoration-[#183b37]/30 underline-offset-[3px] transition-colors hover:text-[#c2410c] hover:decoration-[#c2410c] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#ea580c] dark:text-[#fed7aa] dark:decoration-[#fed7aa]/40 dark:hover:text-[#fb923c]"
+              to={isLogin ? '/register' : '/login'}
+            >
+              {isLogin ? 'Create one' : 'Sign in'}
+            </Link>
+          </p>
+        </div>
       </section>
+
+      <aside className="hidden p-4 lg:block" aria-label="Daymark preview">
+        <div className="sticky top-4 flex h-[calc(100dvh-2rem)] min-h-[600px] items-center justify-center overflow-hidden rounded-[28px] bg-[#e4eadf] px-10 dark:bg-[#111a17]">
+          {/* The Daymark horizon runs behind the sheet, echoing the brand mark. */}
+          <div
+            aria-hidden="true"
+            className="absolute inset-x-0 top-[58%] h-px bg-[#183b37]/18 dark:bg-[#fed7aa]/12"
+          />
+          <AuthDayPreview mode={mode} />
+        </div>
+      </aside>
 
       <LegalModal type={legalModal} onClose={() => setLegalModal(null)} />
     </main>
+  )
+}
+
+const inputClass =
+  'h-12 w-full rounded-[10px] border border-[#d4dbd2] bg-white px-3.5 text-[0.95rem] font-normal text-[#1c2a24] outline-none transition-[border-color,box-shadow] duration-200 placeholder:text-[#6b746c] hover:border-[#b5c0b8] focus:border-[#183b37] focus:shadow-[0_0_0_3px_rgba(24,59,55,0.14)] aria-[invalid=true]:border-[#ea580c] aria-[invalid=true]:focus:shadow-[0_0_0_3px_rgba(234,88,12,0.16)] dark:border-[#383838] dark:bg-[#262626] dark:text-[#f3f4f6] dark:placeholder:text-[#8b929c] dark:hover:border-[#4d4d4d] dark:focus:border-[#fed7aa] dark:focus:shadow-[0_0_0_3px_rgba(254,215,170,0.18)] dark:aria-[invalid=true]:border-[#fb923c]'
+
+const legalLinkClass =
+  'inline cursor-pointer rounded border-0 bg-transparent p-0 font-semibold text-[#27352f] underline decoration-[#27352f]/35 underline-offset-[3px] transition-colors hover:text-[#c2410c] hover:decoration-[#c2410c] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#ea580c] dark:text-[#e5e7eb] dark:decoration-[#e5e7eb]/40 dark:hover:text-[#fb923c]'
+
+interface FieldProps {
+  id: string
+  label: string
+  error?: string
+  aside?: ReactNode
+  children: ReactNode
+}
+
+function Field({ id, label, error, aside, children }: FieldProps) {
+  return (
+    <div className="grid gap-1.5">
+      <div className="flex items-baseline justify-between gap-3">
+        <label
+          htmlFor={id}
+          className="text-[0.8rem] font-semibold text-[#435249] dark:text-[#c5cec7]"
+        >
+          {label}
+        </label>
+        {aside}
+      </div>
+      {children}
+      {error && (
+        <span
+          id={`${id}-error`}
+          className="text-[0.78rem] font-medium leading-tight text-[#c2410c] dark:text-[#fb923c]"
+          role="alert"
+        >
+          {error}
+        </span>
+      )}
+    </div>
   )
 }

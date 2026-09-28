@@ -44,6 +44,9 @@ export function Navbar({ className = '', brandHref, variant }: NavbarProps) {
     ? 'relative z-10 mx-auto flex items-center justify-between w-full max-w-[1320px] px-5.5 md:px-[5vw] py-[26px] text-[#1f2937] dark:text-[#f3f4f6]'
     : 'absolute top-0 left-0 right-0 z-10 mx-auto flex items-center justify-between w-full max-w-[1320px] px-5.5 md:px-[5vw] py-7 text-white'
 
+  // Filled CTA follows its ground: paper pages get the primary, the hero photo gets the inverse.
+  const ctaClasses = isLight ? 'btn-primary' : 'btn-primary-inverse'
+
   const desktopLinkClasses = isLight
     ? 'text-[#66736a] dark:text-[#a7b0bf] hover:text-[#ea580c] dark:hover:text-[#fb923c] uppercase transition-colors duration-200 focus-visible:outline-2 focus-visible:outline-[#fed7aa] focus-visible:outline-offset-4'
     : 'hover:opacity-70 uppercase transition-opacity duration-200 focus-visible:outline-2 focus-visible:outline-[#fed7aa] focus-visible:outline-offset-4'
@@ -51,7 +54,7 @@ export function Navbar({ className = '', brandHref, variant }: NavbarProps) {
   return (
     <header className={`${navContainerClasses} ${className}`.trim()}>
       <Link
-        className="group inline-flex items-center gap-[9px] text-[0.95rem] font-bold tracking-[0.06em] uppercase z-10 focus-visible:outline-2 focus-visible:outline-[#fed7aa] focus-visible:outline-offset-4"
+        className="group inline-flex items-center gap-[9px] font-logo text-[0.95rem] font-bold tracking-[0.08em] uppercase z-10 focus-visible:outline-2 focus-visible:outline-[#fed7aa] focus-visible:outline-offset-4"
         to={brandHref || (isAuthenticated ? '/dashboard' : '/')}
         aria-label="Daymark home"
         onClick={() => setMenuOpen(false)}
@@ -92,7 +95,7 @@ export function Navbar({ className = '', brandHref, variant }: NavbarProps) {
           </Link>
 
           <Link
-            className="hidden md:inline-flex items-center gap-2 ml-5 px-[15px] py-[9px] border border-[#fed7aa]/60 rounded-full text-[#1f2937] bg-[#fed7aa] text-[0.74rem] font-bold transition-all duration-200 hover:-translate-y-0.5 hover:bg-[#ffedd5] focus-visible:outline-2 focus-visible:outline-[#fed7aa] focus-visible:outline-offset-4 shadow-sm"
+            className={`hidden md:inline-flex items-center gap-2 ml-5 px-[15px] py-[9px] rounded-full text-[0.74rem] font-bold transition-all duration-200 hover:-translate-y-0.5 shadow-sm ${ctaClasses}`}
             to="/profile"
           >
             <div className="w-4 h-4 rounded-full bg-[#1f2937] text-[#fed7aa] flex items-center justify-center text-[0.6rem] font-bold">
@@ -114,7 +117,7 @@ export function Navbar({ className = '', brandHref, variant }: NavbarProps) {
           </Link>
 
           <Link
-            className="hidden md:inline-flex items-center gap-2 ml-5 px-[15px] py-[11px] border border-[#fed7aa]/60 rounded-full text-[#1f2937] bg-[#fed7aa] text-[0.74rem] font-bold transition-all duration-200 hover:-translate-y-0.5 hover:bg-[#ffedd5] focus-visible:outline-2 focus-visible:outline-[#fed7aa] focus-visible:outline-offset-4"
+            className={`hidden md:inline-flex items-center gap-2 ml-5 px-[15px] py-[11px] rounded-full text-[0.74rem] font-bold transition-all duration-200 hover:-translate-y-0.5 ${ctaClasses}`}
             to="/register"
           >
             START FOR FREE <ArrowRight size={15} />
@@ -189,7 +192,7 @@ export function Navbar({ className = '', brandHref, variant }: NavbarProps) {
                   <Link
                     to="/profile"
                     onClick={() => setMenuOpen(false)}
-                    className="flex items-center justify-center gap-2 px-5 py-[12px] rounded-full bg-[#fed7aa] text-[#1f2937] font-bold text-[0.88rem] mt-1 shadow-[0_4px_14px_rgba(0,0,0,0.2)] hover:bg-[#ffedd5] transition-colors"
+                    className="flex items-center justify-center gap-2 px-5 py-[12px] rounded-full btn-primary-inverse font-bold text-[0.88rem] mt-1 shadow-[0_4px_14px_rgba(0,0,0,0.2)] transition-colors"
                   >
                     <span>Profile ({user.name?.split(' ')[0]})</span>
                   </Link>
@@ -215,7 +218,7 @@ export function Navbar({ className = '', brandHref, variant }: NavbarProps) {
                     <ArrowRight size={15} />
                   </Link>
                   <Link
-                    className="flex items-center justify-center gap-2 px-5 py-[13px] rounded-full bg-[#fed7aa] text-[#1f2937] font-bold text-[0.88rem] mt-1 shadow-[0_4px_14px_rgba(0,0,0,0.2)] hover:bg-[#ffedd5] transition-colors"
+                    className="flex items-center justify-center gap-2 px-5 py-[13px] rounded-full btn-primary-inverse font-bold text-[0.88rem] mt-1 shadow-[0_4px_14px_rgba(0,0,0,0.2)] transition-colors"
                     to="/register"
                     onClick={() => setMenuOpen(false)}
                   >

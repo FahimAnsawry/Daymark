@@ -4,12 +4,14 @@ import { RouterProvider, createRouter } from '@tanstack/react-router'
 import { QueryClientProvider } from '@tanstack/react-query'
 import { queryClient } from './lib/query-client'
 import { routeTree } from './routeTree.gen'
+import { LoadingPage } from './components/LoadingPage'
 import './index.css'
 
 // Create a new router instance
 const router = createRouter({
   routeTree,
   defaultPreload: 'intent',
+  defaultPendingComponent: () => <LoadingPage />,
 })
 
 // Register the router instance for type safety

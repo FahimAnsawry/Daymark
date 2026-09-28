@@ -147,7 +147,7 @@ export function LegalModal({ type, onClose }: LegalModalProps) {
                 <p className="m-0 text-[0.8rem] leading-[1.55] text-[#43544a] dark:text-[#a5b7ac]">
                   Daymark is built with privacy as a foundational principle. Your daily logs,
                   journal thoughts, and task workflows are private to you. We do not sell your
-                  personal data or journaling habits to advertisers or third-party data brokers.
+                  personal data or journaling activity to advertisers or third-party data brokers.
                 </p>
               </section>
 
@@ -199,7 +199,7 @@ export function LegalModal({ type, onClose }: LegalModalProps) {
         <div className="flex justify-end p-[12px_20px_16px] border-t border-[#e1e8e2] dark:border-[#94a3b8]/15 bg-[#f4f7f4] dark:bg-[#101b16]">
           <button
             type="button"
-            className="px-[18px] py-2 border border-[#244934] dark:border-[#3b7454] rounded-[3px] bg-[#244934] dark:bg-[#2b563e] text-white text-[0.8rem] font-bold cursor-pointer transition-all hover:bg-[#356248] dark:hover:bg-[#386d4f] hover:-translate-y-0.5"
+            className="px-[18px] py-2 border-0 rounded-full btn-primary text-[0.8rem] font-bold cursor-pointer transition-all hover:-translate-y-0.5"
             onClick={onClose}
           >
             I Understand
