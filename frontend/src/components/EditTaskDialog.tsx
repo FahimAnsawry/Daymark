@@ -1,7 +1,6 @@
-import { Bell, Calendar, Clock, Folder, RotateCw, Tag, Trash2, X } from 'lucide-react'
+import { Calendar, Clock, Folder, RotateCw, Tag, Trash2, X } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
-import type { Repeat, Task, TaskChanges } from '../lib/tasks'
-import { ReminderPicker } from './ReminderPicker'
+import type { Reminder, Repeat, Task, TaskChanges } from '../lib/tasks'
 import type { ReminderSetting } from '../lib/reminders'
 
 type Props = {
@@ -11,8 +10,8 @@ type Props = {
   onSave: (changes: TaskChanges) => void
   onDelete: (task: Task) => void
   projects: string[]
-  hasPlus: boolean
-  onUpgrade: () => void
+  hasPlus?: boolean
+  onUpgrade?: () => void
 }
 
 export function EditTaskDialog({
@@ -22,8 +21,6 @@ export function EditTaskDialog({
   onSave,
   onDelete,
   projects,
-  hasPlus,
-  onUpgrade,
 }: Props) {
   const [title, setTitle] = useState('')
   const [due, setDue] = useState('')
@@ -39,7 +36,7 @@ export function EditTaskDialog({
     if (task) {
       setTitle(task.title || '')
       setDue(task.due || '')
-      setTime(task.time || '')
+      setTime(task.reminder || task.time || '')
       setProject(task.project || '')
       setLabel(task.label || '')
       setRepeat(task.repeat || 'none')
@@ -87,19 +84,19 @@ export function EditTaskDialog({
     if (!title.trim()) return
 
     const reminderValue = isExistingReminderTask
-      ? (reminder?.reminder ?? task.reminder)
+      ? (time || reminder?.reminder || task.reminder)
       : (reminder?.reminder ?? null)
 
     onSave({
       title: title.trim(),
       due: due || '',
-      time: isExistingReminderTask ? (reminder?.reminder ?? time ?? '') : (time || ''),
+      time: isExistingReminderTask ? (reminderValue || '') : (time || ''),
       project: project || '',
       label: label.trim(),
       repeat,
-      reminder: reminderValue,
+      reminder: reminderValue ? (reminderValue as Reminder) : null,
       reminder_early: reminder?.early ?? false,
-      reminder_frequency: reminder?.frequency ?? null,
+      reminder_frequency: repeat !== 'none' ? repeat : (reminder?.frequency ?? null),
     })
     onClose()
   }
@@ -151,44 +148,59 @@ export function EditTaskDialog({
             />
           </div>
 
-          {isExistingReminderTask ? (
+          <div className="grid grid-cols-2 gap-3 max-[520px]:grid-cols-1">
             <div>
               <label className="mb-1.5 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-[#667085] dark:text-[#a7b0bf]">
                 <Calendar size={13} /> Due Date
               </label>
               <input
                 type="date"
+                required={isExistingReminderTask}
                 className="box-border h-10 w-full rounded-lg border border-[#d9dee7] bg-white px-3 text-sm text-[#1f2937] outline-none focus:border-orange-500 dark:border-[#424242] dark:bg-[#1e1e1e] dark:text-[#f2f2f2] dark:focus:border-orange-400"
                 value={due}
                 onChange={(e) => setDue(e.target.value)}
               />
             </div>
-          ) : (
-            <div className="grid grid-cols-2 gap-3 max-[520px]:grid-cols-1">
-              <div>
-                <label className="mb-1.5 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-[#667085] dark:text-[#a7b0bf]">
-                  <Calendar size={13} /> Due Date
+            <div>
+              <label className="mb-1.5 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-[#667085] dark:text-[#a7b0bf]">
+                <Clock size={13} /> {isExistingReminderTask ? 'Time' : 'Time (optional)'}
+              </label>
+              <input
+                type="time"
+                required={isExistingReminderTask}
+                className="box-border h-10 w-full rounded-lg border border-[#d9dee7] bg-white px-3 text-sm text-[#1f2937] outline-none focus:border-orange-500 dark:border-[#424242] dark:bg-[#1e1e1e] dark:text-[#f2f2f2] dark:focus:border-orange-400"
+                value={time}
+                onChange={(e) => {
+                  const val = e.target.value
+                  setTime(val)
+                  if (isExistingReminderTask) {
+                    setReminder((prev) => ({
+                      reminder: (val || '09:00') as Reminder,
+                      early: prev?.early ?? false,
+                      frequency: prev?.frequency ?? null,
+                    }))
+                  }
+                }}
+              />
+              {isExistingReminderTask && (
+                <label className="mt-1.5 flex cursor-pointer items-center gap-1.5 text-xs text-[#667085] dark:text-[#a7b0bf]">
+                  <input
+                    type="checkbox"
+                    className="accent-orange-600"
+                    checked={reminder?.early ?? false}
+                    onChange={(e) => {
+                      setReminder((prev) => ({
+                        reminder: (time || prev?.reminder || '09:00') as Reminder,
+                        early: e.target.checked,
+                        frequency: prev?.frequency ?? null,
+                      }))
+                    }}
+                  />
+                  <span>10 minutes before</span>
                 </label>
-                <input
-                  type="date"
-                  className="box-border h-10 w-full rounded-lg border border-[#d9dee7] bg-white px-3 text-sm text-[#1f2937] outline-none focus:border-orange-500 dark:border-[#424242] dark:bg-[#1e1e1e] dark:text-[#f2f2f2] dark:focus:border-orange-400"
-                  value={due}
-                  onChange={(e) => setDue(e.target.value)}
-                />
-              </div>
-              <div>
-                <label className="mb-1.5 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-[#667085] dark:text-[#a7b0bf]">
-                  <Clock size={13} /> Time (optional)
-                </label>
-                <input
-                  type="time"
-                  className="box-border h-10 w-full rounded-lg border border-[#d9dee7] bg-white px-3 text-sm text-[#1f2937] outline-none focus:border-orange-500 dark:border-[#424242] dark:bg-[#1e1e1e] dark:text-[#f2f2f2] dark:focus:border-orange-400"
-                  value={time}
-                  onChange={(e) => setTime(e.target.value)}
-                />
-              </div>
+              )}
             </div>
-          )}
+          </div>
 
           <div className="grid grid-cols-2 gap-3 max-[520px]:grid-cols-1">
             <div>
@@ -237,47 +249,6 @@ export function EditTaskDialog({
               placeholder="e.g. urgent, health, finances"
             />
           </div>
-
-          {reminder && (
-            <div className="rounded-xl border border-[#d9dee7] bg-white p-3 dark:border-[#424242] dark:bg-[#1e1e1e]">
-              <div className="mb-2 flex items-center justify-between">
-                <span className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-[#667085] dark:text-[#a7b0bf]">
-                  <Bell size={13} /> Reminder Settings
-                </span>
-                {!isExistingReminderTask && (
-                  <button
-                    type="button"
-                    className="cursor-pointer border-0 bg-transparent text-xs text-red-600 hover:underline dark:text-red-400"
-                    onClick={() => setReminder(null)}
-                  >
-                    Remove reminder
-                  </button>
-                )}
-              </div>
-              <div className="flex items-center">
-                <ReminderPicker
-                  value={reminder.reminder}
-                  early={reminder.early}
-                  frequency={reminder.frequency}
-                  canRemove={!isExistingReminderTask}
-                  onChange={(next) => {
-                    if (isExistingReminderTask && !next?.reminder) return
-                    if (next && !due) {
-                      const now = new Date()
-                      setDue(
-                        `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`,
-                      )
-                    }
-                    setReminder(next)
-                  }}
-                  locked={!hasPlus}
-                  onUpgrade={onUpgrade}
-                  hasDueDate={Boolean(due)}
-                  suggestedTime={time}
-                />
-              </div>
-            </div>
-          )}
 
           <div className="mt-4 flex items-center justify-between border-t border-[#e2e7df] pt-4 dark:border-[#383838]">
             <button
