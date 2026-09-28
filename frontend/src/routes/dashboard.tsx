@@ -1177,7 +1177,12 @@ function DashboardPage() {
               onShare={setShareTarget}
             />
           ) : view === 'reminders' ? (
-            <ReminderSettings user={user} tasks={tasks} />
+            <ReminderSettings
+              user={user}
+              tasks={tasks}
+              onEdit={(task) => setEditingTask(task)}
+              onDelete={(task) => setDeleteTarget({ type: 'task', task })}
+            />
           ) : view === 'calendar' ? (
             <CalendarSettings />
           ) : view === 'help' ? (

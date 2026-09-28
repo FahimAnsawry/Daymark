@@ -1,4 +1,4 @@
-import { BellOff } from 'lucide-react'
+import { Pencil, Trash2 } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import { usePlan, type User } from '../lib/auth-context'
 import { errorMessage, useUpdatePreferences } from '../lib/billing'
@@ -8,7 +8,7 @@ import {
   notificationsSupported,
   pushSupported,
 } from '../lib/reminders'
-import { localDate, useUpdateTask, type Task } from '../lib/tasks'
+import { localDate, useDeleteTask, type Task } from '../lib/tasks'
 import { PlusGate, PreviewRow } from './PlusGate'
 import {
   settingsMutedText as mutedText,
@@ -18,7 +18,17 @@ import {
 } from './SettingsLayout'
 
 /** Gentle reminders (Plus): quiet hours, and what's coming up. */
-export function ReminderSettings({ user, tasks }: { user: User; tasks: Task[] }) {
+export function ReminderSettings({
+  user,
+  tasks,
+  onEdit,
+  onDelete,
+}: {
+  user: User
+  tasks: Task[]
+  onEdit?: (task: Task) => void
+  onDelete?: (task: Task) => void
+}) {
   const { has } = usePlan()
 
   return (
@@ -26,7 +36,7 @@ export function ReminderSettings({ user, tasks }: { user: User; tasks: Task[] })
       {has('plus') ? (
         <>
           <QuietHoursPanel user={user} />
-          <UpcomingReminders user={user} tasks={tasks} />
+          <UpcomingReminders user={user} tasks={tasks} onEdit={onEdit} onDelete={onDelete} />
         </>
       ) : (
         <PlusGate
@@ -74,9 +84,19 @@ const clockTime = (date: Date) =>
  * Reminders that haven't gone out yet, soonest first, grouped by day. Only the
  * person's own tasks: a reminder on someone else's shared task goes to its owner.
  */
-function UpcomingReminders({ user, tasks }: { user: User; tasks: Task[] }) {
+function UpcomingReminders({
+  user,
+  tasks,
+  onEdit,
+  onDelete,
+}: {
+  user: User
+  tasks: Task[]
+  onEdit?: (task: Task) => void
+  onDelete?: (task: Task) => void
+}) {
   const now = useMinuteClock()
-  const updateTask = useUpdateTask()
+  const deleteTaskMutation = useDeleteTask()
 
   const days = useMemo(() => {
     const upcoming = tasks
@@ -117,15 +137,22 @@ function UpcomingReminders({ user, tasks }: { user: User; tasks: Task[] }) {
               </h3>
               <ul className="m-0 mt-2 list-none divide-y divide-[#e8e5dc] p-0 dark:divide-[#3a3a3a]">
                 {items.map(({ task, at }) => (
-                  <li key={task.id} className="flex items-center gap-3 py-2.5">
+                  <li key={task.id} className="group flex items-center gap-3 py-2.5">
                     <time
                       dateTime={at.toISOString()}
-                      className="w-[72px] shrink-0 text-sm font-medium tabular-nums"
+                      className="w-[72px] shrink-0 text-sm font-medium tabular-nums text-orange-600 dark:text-orange-400"
                     >
                       {clockTime(at)}
                     </time>
                     <span className="min-w-0 flex-1">
-                      <span className="block truncate text-sm">{task.title}</span>
+                      <button
+                        type="button"
+                        className="m-0 block truncate border-0 bg-transparent p-0 text-left text-sm font-medium text-inherit hover:underline cursor-pointer"
+                        title="Click to edit task"
+                        onClick={() => onEdit?.(task)}
+                      >
+                        {task.title}
+                      </button>
                       {(task.project || task.reminder_frequency || task.reminder_early) && (
                         <span className={`block truncate text-[12px] ${mutedText}`}>
                           {[
@@ -142,12 +169,21 @@ function UpcomingReminders({ user, tasks }: { user: User; tasks: Task[] }) {
                     </span>
                     <button
                       type="button"
-                      aria-label={`Remove reminder for ${task.title}`}
-                      title="Remove reminder"
-                      className="grid size-8 shrink-0 cursor-pointer place-items-center rounded-md border-0 bg-transparent text-[#667085] hover:bg-black/[0.06] hover:text-[#1f2937] focus-visible:outline-2 focus-visible:outline-orange-500 dark:text-[#a7b0bf] dark:hover:bg-white/[0.08] dark:hover:text-white"
-                      onClick={() => updateTask.mutate({ task, changes: { reminder: null } })}
+                      aria-label={`Edit ${task.title}`}
+                      title="Edit reminder"
+                      className="grid size-8 shrink-0 cursor-pointer place-items-center rounded-md border-0 bg-transparent text-[#667085] hover:bg-[#fff3e5] hover:text-orange-700 focus-visible:outline-2 focus-visible:outline-orange-500 dark:text-[#a7b0bf] dark:hover:bg-orange-400/15 dark:hover:text-orange-300"
+                      onClick={() => onEdit?.(task)}
                     >
-                      <BellOff size={16} aria-hidden="true" />
+                      <Pencil size={15} aria-hidden="true" />
+                    </button>
+                    <button
+                      type="button"
+                      aria-label={`Delete ${task.title}`}
+                      title="Delete reminder"
+                      className="grid size-8 shrink-0 cursor-pointer place-items-center rounded-md border-0 bg-transparent text-[#667085] hover:bg-[#fff3e5] hover:text-red-600 focus-visible:outline-2 focus-visible:outline-red-500 dark:text-[#a7b0bf] dark:hover:bg-orange-400/15 dark:hover:text-red-400"
+                      onClick={() => (onDelete ? onDelete(task) : deleteTaskMutation.mutate(task))}
+                    >
+                      <Trash2 size={16} aria-hidden="true" />
                     </button>
                   </li>
                 ))}
