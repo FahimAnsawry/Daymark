@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import { completeTaskLocally, localDate } from '../src/lib/tasks.ts'
 
-test('completing a normal task marks it done and records completed_at', () => {
+test('completing a daily task marks it done and records completed_at', () => {
   const task = {
     id: 1,
     title: 'Write report',

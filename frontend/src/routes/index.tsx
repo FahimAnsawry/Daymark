@@ -3,6 +3,7 @@ import { createFileRoute, Link } from '@tanstack/react-router'
 import { ArrowRight, Play } from 'lucide-react'
 import { Navbar } from '../components/Navbar'
 import { SiteFooter } from '../components/SiteFooter'
+import { GuestOnly } from '../components/GuestOnly'
 
 interface Principle {
   step: string
@@ -77,142 +78,144 @@ export const Route = createFileRoute('/')({
 
 function LandingPage() {
   return (
-    <div className="overflow-hidden bg-app-background text-[#1f2937] dark:text-[#f3f4f6] transition-colors duration-250">
-      <Navbar brandHref="#top" />
+    <GuestOnly>
+      <div className="overflow-hidden bg-app-background text-[#1f2937] dark:text-[#f3f4f6] transition-colors duration-250">
+        <Navbar brandHref="#top" />
 
-      <main id="top">
-        <section
-          className="relative grid min-h-[750px] md:min-h-[815px] place-items-start md:place-items-center isolate overflow-hidden text-white bg-[#183b37] after:absolute after:-z-10 after:inset-0 after:content-[''] after:bg-[linear-gradient(180deg,rgba(8,27,28,0.38),transparent_45%,rgba(8,27,28,0.45))]"
-          aria-labelledby="hero-title"
-        >
-          <img
-            className="absolute -z-20 inset-0 w-full h-full object-cover object-[63%_center] md:object-[54%_center] scale-[1.08] md:scale-[1.015]"
-            src="https://images.unsplash.com/photo-1456324504439-367cee3b3c32?auto=format&fit=crop&w=2200&q=85"
-            alt="A sunlit desk with an open notebook and a cup of tea"
-            width={2200}
-            height={1467}
-            fetchPriority="high"
-          />
-          <div className="absolute -z-10 inset-0 bg-[linear-gradient(102deg,rgba(14,49,45,0.9)_0%,rgba(14,49,45,0.62)_36%,rgba(11,36,36,0.08)_74%),linear-gradient(transparent_55%,rgba(11,36,36,0.74))]" />
-          <div className="w-[min(730px,90vw)] pt-[145px] md:pt-[75px] text-center mx-auto">
-            <h1
-              id="hero-title"
-              className="mb-[23px] font-display text-[clamp(2.75rem,10vw,4.25rem)] md:text-[clamp(4.1rem,6vw,5.6rem)] font-semibold tracking-[-0.04em] leading-[1.05] md:leading-[1.04] [&>em]:font-semibold [&>em]:text-[#e0ebbd] dark:[&>em]:text-[#94a3b8] [&>em]:not-italic"
-            >
-              Plan your day.
-              <br />
-              <em>Keep your life.</em>
-            </h1>
-            <p className="w-[min(390px,85vw)] mx-auto mb-[30px] text-[0.95rem] md:text-[1.05rem] leading-[1.55] text-white/85">
-              Daymark turns the small things on your mind into a clear, kind plan you can actually
-              follow.
-            </p>
-            <div
-              className="flex flex-col md:flex-row justify-center items-center gap-[15px] md:gap-5"
-              id="start"
-            >
-              <Link
-                className="inline-flex items-center gap-2.5 rounded-full text-[0.85rem] font-bold px-[21px] py-[15px] btn-primary-inverse transition-all duration-200 hover:-translate-y-0.5"
-                to="/register"
-              >
-                Start for free <ArrowRight size={17} />
-              </Link>
-              <a
-                className="inline-flex items-center gap-2.5 rounded-full text-[0.85rem] font-bold text-white transition-transform duration-200 hover:-translate-y-0.5 focus-visible:outline-2 focus-visible:outline-[#fed7aa] focus-visible:outline-offset-4"
-                href="#how-it-works"
-              >
-                <span className="grid place-items-center w-[27px] h-[27px] pl-[2px] border border-white/65 rounded-full">
-                  <Play size={11} fill="currentColor" />
-                </span>{' '}
-                See how it works
-              </a>
-            </div>
-            <p className="mt-[17px] text-[0.68rem] text-white/60">
-              Free forever for personal use · No credit card
-            </p>
-          </div>
-        </section>
-
-        <section
-          className="bg-[#f7f6f2] px-6 pt-[96px] pb-[104px] md:px-[30px] md:pt-[136px] md:pb-[150px] dark:bg-app-background"
-          id="how-it-works"
-          aria-labelledby="principles-title"
-        >
-          <div className="mx-auto max-w-[900px] text-center">
-            <h2
-              id="principles-title"
-              className="m-0 font-display text-[clamp(2.3rem,4.6vw,3.6rem)] font-semibold tracking-[-0.035em] leading-[1.08] text-balance text-[#1f2937] dark:text-[#f2f4ee]"
-            >
-              Your day is more than a list of things to do.
-            </h2>
-            <p className="mx-auto mt-6 max-w-[590px] text-[1.05rem] md:text-[1.15rem] leading-[1.6] text-pretty text-[#727b73] dark:text-[#a7b0bf]">
-              Capture what matters, make room for what doesn’t, and move through your day with a
-              little more intention.
-            </p>
-          </div>
-
-          <ol className="mx-auto mt-16 grid max-w-[1240px] list-none grid-cols-1 gap-5 p-0 md:mt-[72px] md:grid-cols-3 md:gap-6">
-            {PRINCIPLES.map((principle) => (
-              <li
-                key={principle.step}
-                className="group flex flex-col rounded-[20px] bg-[#ecebe5] px-7 pt-10 pb-10 text-center md:px-10 md:pt-12 md:pb-14 dark:bg-[#262626]"
-              >
-                <span className="text-[0.82rem] font-bold tabular-nums text-[#ea580c] dark:text-[#fb923c]">
-                  {principle.step}
-                </span>
-                <h3 className="m-0 mt-3 font-display text-[clamp(1.6rem,2.3vw,2.05rem)] font-semibold tracking-[-0.03em] leading-[1.15] text-[#1f2937] dark:text-[#f2f4ee]">
-                  {principle.title}
-                </h3>
-                <p className="mx-auto mt-3.5 mb-0 max-w-[300px] text-[1rem] leading-[1.55] text-[#727b73] dark:text-[#a7b0bf]">
-                  {principle.body}
-                </p>
-                <div className="mt-12 md:mt-auto md:pt-[88px]" aria-hidden="true">
-                  {principle.vignette}
-                </div>
-              </li>
-            ))}
-          </ol>
-        </section>
-
-        <section
-          className="bg-[#183b37] px-6 py-[96px] text-center text-[#f7f6f2] md:py-[124px] dark:bg-[#111a17]"
-          aria-label="Member story"
-        >
-          <figure className="mx-auto m-0 max-w-[1000px]">
-            <blockquote className="m-0 font-display text-[clamp(1.85rem,3.7vw,3.25rem)] font-semibold tracking-[-0.03em] leading-[1.2] text-balance">
-              It’s the first planner that doesn’t treat rest as lost time. When the day is done, my
-              evenings feel like mine again.
-            </blockquote>
-            <figcaption className="mt-10 text-[0.95rem] text-[#f7f6f2]/75 md:mt-12">
-              Elena Rostova, Writer and Researcher, Edinburgh
-            </figcaption>
-          </figure>
-        </section>
-
-        <section
-          className="bg-[#f7f6f2] px-6 py-[88px] text-center md:py-[104px] dark:bg-app-background"
-          aria-labelledby="closing-title"
-        >
-          <h2
-            id="closing-title"
-            className="m-0 font-display text-[clamp(2.6rem,6.4vw,5.5rem)] font-semibold tracking-[-0.035em] leading-[1.02] text-balance text-[#1f2937] dark:text-[#f2f4ee]"
+        <main id="top">
+          <section
+            className="relative grid min-h-[750px] md:min-h-[815px] place-items-start md:place-items-center isolate overflow-hidden text-white bg-[#183b37] after:absolute after:-z-10 after:inset-0 after:content-[''] after:bg-[linear-gradient(180deg,rgba(8,27,28,0.38),transparent_45%,rgba(8,27,28,0.45))]"
+            aria-labelledby="hero-title"
           >
-            Make a little room for your life.
-          </h2>
-          <Link
-            className="group mt-8 inline-flex items-center gap-2.5 rounded-full btn-primary px-9 py-[18px] text-[1.05rem] font-bold transition-all duration-200 hover:-translate-y-0.5 md:mt-7"
-            to="/register"
-          >
-            Start for free
-            <ArrowRight
-              size={18}
-              className="-ml-1 w-0 opacity-0 transition-all duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] group-hover:ml-0 group-hover:w-[18px] group-hover:opacity-100 group-focus-visible:ml-0 group-focus-visible:w-[18px] group-focus-visible:opacity-100"
+            <img
+              className="absolute -z-20 inset-0 w-full h-full object-cover object-[63%_center] md:object-[54%_center] scale-[1.08] md:scale-[1.015]"
+              src="https://images.unsplash.com/photo-1456324504439-367cee3b3c32?auto=format&fit=crop&w=2200&q=85"
+              alt="A sunlit desk with an open notebook and a cup of tea"
+              width={2200}
+              height={1467}
+              fetchPriority="high"
             />
-          </Link>
-        </section>
-      </main>
+            <div className="absolute -z-10 inset-0 bg-[linear-gradient(102deg,rgba(14,49,45,0.9)_0%,rgba(14,49,45,0.62)_36%,rgba(11,36,36,0.08)_74%),linear-gradient(transparent_55%,rgba(11,36,36,0.74))]" />
+            <div className="w-[min(730px,90vw)] pt-[145px] md:pt-[75px] text-center mx-auto">
+              <h1
+                id="hero-title"
+                className="mb-[23px] font-display text-[clamp(2.75rem,10vw,4.25rem)] md:text-[clamp(4.1rem,6vw,5.6rem)] font-semibold tracking-[-0.04em] leading-[1.05] md:leading-[1.04] [&>em]:font-semibold [&>em]:text-[#e0ebbd] dark:[&>em]:text-[#94a3b8] [&>em]:not-italic"
+              >
+                Plan your day.
+                <br />
+                <em>Keep your life.</em>
+              </h1>
+              <p className="w-[min(390px,85vw)] mx-auto mb-[30px] text-[0.95rem] md:text-[1.05rem] leading-[1.55] text-white/85">
+                Daymark turns the small things on your mind into a clear, kind plan you can actually
+                follow.
+              </p>
+              <div
+                className="flex flex-col md:flex-row justify-center items-center gap-[15px] md:gap-5"
+                id="start"
+              >
+                <Link
+                  className="inline-flex items-center gap-2.5 rounded-full text-[0.85rem] font-bold px-[21px] py-[15px] btn-primary-inverse transition-all duration-200 hover:-translate-y-0.5"
+                  to="/register"
+                >
+                  Start for free <ArrowRight size={17} />
+                </Link>
+                <a
+                  className="inline-flex items-center gap-2.5 rounded-full text-[0.85rem] font-bold text-white transition-transform duration-200 hover:-translate-y-0.5 focus-visible:outline-2 focus-visible:outline-[#fed7aa] focus-visible:outline-offset-4"
+                  href="#how-it-works"
+                >
+                  <span className="grid place-items-center w-[27px] h-[27px] pl-[2px] border border-white/65 rounded-full">
+                    <Play size={11} fill="currentColor" />
+                  </span>{' '}
+                  See how it works
+                </a>
+              </div>
+              <p className="mt-[17px] text-[0.68rem] text-white/60">
+                Free forever for personal use · No credit card
+              </p>
+            </div>
+          </section>
 
-      <SiteFooter />
-    </div>
+          <section
+            className="bg-[#f7f6f2] px-6 pt-[96px] pb-[104px] md:px-[30px] md:pt-[136px] md:pb-[150px] dark:bg-app-background"
+            id="how-it-works"
+            aria-labelledby="principles-title"
+          >
+            <div className="mx-auto max-w-[900px] text-center">
+              <h2
+                id="principles-title"
+                className="m-0 font-display text-[clamp(2.3rem,4.6vw,3.6rem)] font-semibold tracking-[-0.035em] leading-[1.08] text-balance text-[#1f2937] dark:text-[#f2f4ee]"
+              >
+                Your day is more than a list of things to do.
+              </h2>
+              <p className="mx-auto mt-6 max-w-[590px] text-[1.05rem] md:text-[1.15rem] leading-[1.6] text-pretty text-[#727b73] dark:text-[#a7b0bf]">
+                Capture what matters, make room for what doesn’t, and move through your day with a
+                little more intention.
+              </p>
+            </div>
+
+            <ol className="mx-auto mt-16 grid max-w-[1240px] list-none grid-cols-1 gap-5 p-0 md:mt-[72px] md:grid-cols-3 md:gap-6">
+              {PRINCIPLES.map((principle) => (
+                <li
+                  key={principle.step}
+                  className="group flex flex-col rounded-[20px] bg-[#ecebe5] px-7 pt-10 pb-10 text-center md:px-10 md:pt-12 md:pb-14 dark:bg-[#262626]"
+                >
+                  <span className="text-[0.82rem] font-bold tabular-nums text-[#ea580c] dark:text-[#fb923c]">
+                    {principle.step}
+                  </span>
+                  <h3 className="m-0 mt-3 font-display text-[clamp(1.6rem,2.3vw,2.05rem)] font-semibold tracking-[-0.03em] leading-[1.15] text-[#1f2937] dark:text-[#f2f4ee]">
+                    {principle.title}
+                  </h3>
+                  <p className="mx-auto mt-3.5 mb-0 max-w-[300px] text-[1rem] leading-[1.55] text-[#727b73] dark:text-[#a7b0bf]">
+                    {principle.body}
+                  </p>
+                  <div className="mt-12 md:mt-auto md:pt-[88px]" aria-hidden="true">
+                    {principle.vignette}
+                  </div>
+                </li>
+              ))}
+            </ol>
+          </section>
+
+          <section
+            className="bg-[#183b37] px-6 py-[96px] text-center text-[#f7f6f2] md:py-[124px] dark:bg-[#111a17]"
+            aria-label="Member story"
+          >
+            <figure className="mx-auto m-0 max-w-[1000px]">
+              <blockquote className="m-0 font-display text-[clamp(1.85rem,3.7vw,3.25rem)] font-semibold tracking-[-0.03em] leading-[1.2] text-balance">
+                It’s the first planner that doesn’t treat rest as lost time. When the day is done,
+                my evenings feel like mine again.
+              </blockquote>
+              <figcaption className="mt-10 text-[0.95rem] text-[#f7f6f2]/75 md:mt-12">
+                Elena Rostova, Writer and Researcher, Edinburgh
+              </figcaption>
+            </figure>
+          </section>
+
+          <section
+            className="bg-[#f7f6f2] px-6 py-[88px] text-center md:py-[104px] dark:bg-app-background"
+            aria-labelledby="closing-title"
+          >
+            <h2
+              id="closing-title"
+              className="m-0 font-display text-[clamp(2.6rem,6.4vw,5.5rem)] font-semibold tracking-[-0.035em] leading-[1.02] text-balance text-[#1f2937] dark:text-[#f2f4ee]"
+            >
+              Make a little room for your life.
+            </h2>
+            <Link
+              className="group mt-8 inline-flex items-center gap-2.5 rounded-full btn-primary px-9 py-[18px] text-[1.05rem] font-bold transition-all duration-200 hover:-translate-y-0.5 md:mt-7"
+              to="/register"
+            >
+              Start for free
+              <ArrowRight
+                size={18}
+                className="-ml-1 w-0 opacity-0 transition-all duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] group-hover:ml-0 group-hover:w-[18px] group-hover:opacity-100 group-focus-visible:ml-0 group-focus-visible:w-[18px] group-focus-visible:opacity-100"
+              />
+            </Link>
+          </section>
+        </main>
+
+        <SiteFooter />
+      </div>
+    </GuestOnly>
   )
 }

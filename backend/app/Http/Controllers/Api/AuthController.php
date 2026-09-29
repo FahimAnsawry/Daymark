@@ -10,6 +10,8 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Storage;
+use Illuminate\Validation\Rule;
 use Illuminate\Validation\Rules\Password;
 use Laravel\Socialite\Facades\Socialite;
 use Symfony\Component\HttpFoundation\Response;
@@ -137,14 +139,15 @@ class AuthController extends Controller
                 $email = $googleData['email'] ?? null;
                 $name = $googleData['name'] ?? $googleData['given_name'] ?? 'Google User';
                 $googleId = (string) ($googleData['sub'] ?? '');
+                $picture = $googleData['picture'] ?? null;
 
                 if (! $email) {
                     throw new \Exception('No email address provided by Google credential');
                 }
 
-                $user = DB::transaction(function () use ($googleId, $email, $name): User {
+                $user = DB::transaction(function () use ($googleId, $email, $name, $picture): User {
                     $user = User::where('email', $email)->first();
-
+ 
                     if (! $user) {
                         $user = User::create([
                             'name' => $name,
@@ -153,7 +156,7 @@ class AuthController extends Controller
                         ]);
                     }
 
-                    $user->linkVerifiedGoogleAccount($googleId);
+                    $user->linkVerifiedGoogleAccount($googleId, $picture);
 
                     return $user;
                 });
@@ -209,7 +212,7 @@ class AuthController extends Controller
             }
 
             if ($provider === Account::PROVIDER_GOOGLE) {
-                $user->linkVerifiedGoogleAccount((string) $socialUser->getId());
+                $user->linkVerifiedGoogleAccount((string) $socialUser->getId(), $socialUser->getAvatar());
             } else {
                 $user->accounts()->updateOrCreate(
                     ['provider' => $provider],
@@ -343,18 +346,19 @@ class AuthController extends Controller
     }
 
     /**
-     * Update authenticated user password.
+     * Update authenticated user password. Someone who signed in with Google has no password
+     * yet, so they can set one without a current password.
      */
     public function updatePassword(Request $request): JsonResponse
     {
         $user = $request->user();
+        $passwordAccount = $user->passwordAccount;
 
         $validated = $request->validate([
-            'current_password' => ['required', 'string'],
+            'current_password' => [Rule::requiredIf($passwordAccount !== null), 'nullable', 'string'],
             'password' => ['required', 'string', 'confirmed', Password::defaults()],
         ]);
 
-        $passwordAccount = $user->passwordAccount;
         if ($passwordAccount && ! Hash::check($validated['current_password'], $passwordAccount->password_hash)) {
             return response()->json([
                 'message' => 'The provided current password does not match our records.',
@@ -377,6 +381,54 @@ class AuthController extends Controller
 
         return response()->json([
             'message' => 'Password updated successfully',
+            'user' => $user->fresh()->load('accounts'),
+        ]);
+    }
+
+    /**
+     * Upload a profile image. It is only for people whose Google account has no image.
+     */
+    public function updateAvatar(Request $request): JsonResponse
+    {
+        $user = $request->user();
+
+        if (filled($user->avatar_url)) {
+            return response()->json([
+                'message' => 'Your profile image comes from your Google account.',
+            ], 422);
+        }
+
+        $request->validate([
+            'avatar' => ['required', 'image', 'mimes:jpg,jpeg,png,webp', 'max:2048'],
+        ]);
+
+        $previousPath = $user->avatar_path;
+        $user->update(['avatar_path' => $request->file('avatar')->store('avatars', 'public')]);
+
+        if ($previousPath) {
+            Storage::disk('public')->delete($previousPath);
+        }
+
+        return response()->json([
+            'message' => 'Profile image updated successfully',
+            'user' => $user->fresh()->load('accounts'),
+        ]);
+    }
+
+    /**
+     * Remove the uploaded profile image.
+     */
+    public function destroyAvatar(Request $request): JsonResponse
+    {
+        $user = $request->user();
+
+        if ($user->avatar_path) {
+            Storage::disk('public')->delete($user->avatar_path);
+            $user->update(['avatar_path' => null]);
+        }
+
+        return response()->json([
+            'user' => $user->fresh()->load('accounts'),
         ]);
     }
 

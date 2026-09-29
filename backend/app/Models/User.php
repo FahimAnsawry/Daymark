@@ -19,11 +19,12 @@ use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Storage;
 use Laravel\Sanctum\HasApiTokens;
 
-#[Fillable(['name', 'email', 'email_verified_at', 'timezone', 'weekly_recap', 'quiet_hours_start', 'quiet_hours_end', 'morning_digest', 'evening_winddown'])]
-#[Hidden(['remember_token', 'subscription'])]
-#[Appends(['plan'])]
+#[Fillable(['name', 'email', 'email_verified_at', 'timezone', 'weekly_recap', 'quiet_hours_start', 'quiet_hours_end', 'morning_digest', 'evening_winddown', 'avatar_url', 'avatar_path'])]
+#[Hidden(['remember_token', 'subscription', 'avatar_url', 'avatar_path'])]
+#[Appends(['plan', 'avatar', 'avatar_source'])]
 class User extends Authenticatable
 {
     /** @use HasFactory<UserFactory> */
@@ -92,6 +93,28 @@ class User extends Authenticatable
     protected function plan(): Attribute
     {
         return Attribute::get(fn (): string => $this->currentPlan()->value);
+    }
+
+    /**
+     * The profile image to show: the one from Google when there is one, otherwise an upload.
+     */
+    protected function avatar(): Attribute
+    {
+        return Attribute::get(fn (): ?string => filled($this->avatar_url)
+            ? $this->avatar_url
+            : (filled($this->avatar_path) ? Storage::disk('public')->url($this->avatar_path) : null));
+    }
+
+    /**
+     * Where the profile image comes from: `google`, `upload`, or null when there is none.
+     */
+    protected function avatarSource(): Attribute
+    {
+        return Attribute::get(fn (): ?string => match (true) {
+            filled($this->avatar_url) => 'google',
+            filled($this->avatar_path) => 'upload',
+            default => null,
+        });
     }
 
     public function accounts(): HasMany
@@ -183,12 +206,18 @@ class User extends Authenticatable
         return $this->hasOne(Account::class)->where('provider', Account::PROVIDER_PASSWORD);
     }
 
-    public function linkVerifiedGoogleAccount(string $providerId): Account
+    public function linkVerifiedGoogleAccount(string $providerId, ?string $avatarUrl = null): Account
     {
-        return $this->accounts()->updateOrCreate(
+        $account = $this->accounts()->updateOrCreate(
             ['provider' => Account::PROVIDER_GOOGLE],
             ['provider_id' => $providerId, 'password_hash' => null],
         );
+
+        if (filled($avatarUrl)) {
+            $this->update(['avatar_url' => $avatarUrl]);
+        }
+
+        return $account;
     }
 
     public function getAuthPassword(): string

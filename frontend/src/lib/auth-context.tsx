@@ -18,6 +18,9 @@ export interface User {
   name: string
   email: string
   email_verified_at?: string | null
+  /** The profile image: from Google when it has one, otherwise an upload. */
+  avatar?: string | null
+  avatar_source?: 'google' | 'upload' | null
   accounts?: UserAccount[]
   plan: PlanTier
   timezone?: string

@@ -6,6 +6,9 @@ use App\Models\Account;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Hash;
+use Laravel\Socialite\Facades\Socialite;
+use Laravel\Socialite\Two\AbstractProvider;
+use Symfony\Component\HttpFoundation\RedirectResponse;
 use Tests\TestCase;
 
 class AccountAuthenticationTest extends TestCase
@@ -85,7 +88,7 @@ class AccountAuthenticationTest extends TestCase
         $user = User::factory()->create();
         $token = $user->createToken('test-token')->plainTextToken;
 
-        $response = $this->withHeader('Authorization', 'Bearer ' . $token)
+        $response = $this->withHeader('Authorization', 'Bearer '.$token)
             ->postJson('/api/auth/logout');
 
         $response->assertOk()
@@ -99,7 +102,7 @@ class AccountAuthenticationTest extends TestCase
         $user = User::factory()->create();
         $token = $user->createToken('test-token')->plainTextToken;
 
-        $response = $this->withHeader('Authorization', 'Bearer ' . $token)
+        $response = $this->withHeader('Authorization', 'Bearer '.$token)
             ->getJson('/api/auth/me');
 
         $response->assertOk()
@@ -109,12 +112,12 @@ class AccountAuthenticationTest extends TestCase
 
     public function test_oauth_redirect_returns_json_target_url(): void
     {
-        $providerMock = \Mockery::mock(\Laravel\Socialite\Two\AbstractProvider::class);
-        $redirectMock = \Mockery::mock(\Symfony\Component\HttpFoundation\RedirectResponse::class);
+        $providerMock = \Mockery::mock(AbstractProvider::class);
+        $redirectMock = \Mockery::mock(RedirectResponse::class);
         $redirectMock->shouldReceive('getTargetUrl')->andReturn('https://accounts.google.com/o/oauth2/auth');
         $providerMock->shouldReceive('stateless->redirect')->andReturn($redirectMock);
 
-        \Laravel\Socialite\Facades\Socialite::shouldReceive('driver')->with('google')->andReturn($providerMock);
+        Socialite::shouldReceive('driver')->with('google')->andReturn($providerMock);
 
         $response = $this->getJson('/api/auth/google/redirect');
 
@@ -129,11 +132,12 @@ class AccountAuthenticationTest extends TestCase
         $socialiteUser->shouldReceive('getEmail')->andReturn('newgoogle@example.com');
         $socialiteUser->shouldReceive('getName')->andReturn('Google Explorer');
         $socialiteUser->shouldReceive('getNickname')->andReturn('explorer');
+        $socialiteUser->shouldReceive('getAvatar')->andReturn('https://lh3.googleusercontent.com/a/explorer');
 
-        $providerMock = \Mockery::mock(\Laravel\Socialite\Two\AbstractProvider::class);
+        $providerMock = \Mockery::mock(AbstractProvider::class);
         $providerMock->shouldReceive('stateless->user')->andReturn($socialiteUser);
 
-        \Laravel\Socialite\Facades\Socialite::shouldReceive('driver')->with('google')->andReturn($providerMock);
+        Socialite::shouldReceive('driver')->with('google')->andReturn($providerMock);
 
         $response = $this->getJson('/api/auth/google/callback');
 
@@ -148,6 +152,8 @@ class AccountAuthenticationTest extends TestCase
             'provider' => Account::PROVIDER_GOOGLE,
             'provider_id' => 'google-unique-sub-999',
         ]);
+        $this->assertSame('https://lh3.googleusercontent.com/a/explorer', $user->avatar);
+        $this->assertSame('google', $user->avatar_source);
     }
 
     public function test_oauth_callback_links_to_existing_password_user(): void
@@ -159,11 +165,12 @@ class AccountAuthenticationTest extends TestCase
         $socialiteUser->shouldReceive('getEmail')->andReturn('existing@example.com');
         $socialiteUser->shouldReceive('getName')->andReturn('Existing User');
         $socialiteUser->shouldReceive('getNickname')->andReturn('existing');
+        $socialiteUser->shouldReceive('getAvatar')->andReturn(null);
 
-        $providerMock = \Mockery::mock(\Laravel\Socialite\Two\AbstractProvider::class);
+        $providerMock = \Mockery::mock(AbstractProvider::class);
         $providerMock->shouldReceive('stateless->user')->andReturn($socialiteUser);
 
-        \Laravel\Socialite\Facades\Socialite::shouldReceive('driver')->with('google')->andReturn($providerMock);
+        Socialite::shouldReceive('driver')->with('google')->andReturn($providerMock);
 
         $response = $this->getJson('/api/auth/google/callback');
 

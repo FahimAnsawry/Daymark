@@ -19,6 +19,7 @@ import { Route as ProfileRouteImport } from './routes/profile'
 import { Route as RegisterRouteImport } from './routes/register'
 import { Route as CheckoutSuccessRouteImport } from './routes/checkout.success'
 import { Route as InviteTokenRouteImport } from './routes/invite.$token'
+import { Route as SettingsIndexRouteImport } from './routes/settings.index'
 import { Route as SettingsBillingRouteImport } from './routes/settings.billing'
 import { Route as SettingsCalendarRouteImport } from './routes/settings.calendar'
 import { Route as SettingsRemindersRouteImport } from './routes/settings.reminders'
@@ -73,6 +74,11 @@ const InviteTokenRoute = InviteTokenRouteImport.update({
   path: '/invite/$token',
   getParentRoute: () => rootRouteImport,
 } as any)
+const SettingsIndexRoute = SettingsIndexRouteImport.update({
+  id: '/settings/',
+  path: '/settings/',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const SettingsBillingRoute = SettingsBillingRouteImport.update({
   id: '/settings/billing',
   path: '/settings/billing',
@@ -103,6 +109,7 @@ export interface FileRoutesByFullPath {
   '/settings/billing': typeof SettingsBillingRoute
   '/settings/calendar': typeof SettingsCalendarRoute
   '/settings/reminders': typeof SettingsRemindersRoute
+  '/settings/': typeof SettingsIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -118,6 +125,7 @@ export interface FileRoutesByTo {
   '/settings/billing': typeof SettingsBillingRoute
   '/settings/calendar': typeof SettingsCalendarRoute
   '/settings/reminders': typeof SettingsRemindersRoute
+  '/settings': typeof SettingsIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -134,6 +142,7 @@ export interface FileRoutesById {
   '/settings/billing': typeof SettingsBillingRoute
   '/settings/calendar': typeof SettingsCalendarRoute
   '/settings/reminders': typeof SettingsRemindersRoute
+  '/settings/': typeof SettingsIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -151,6 +160,7 @@ export interface FileRouteTypes {
     | '/settings/billing'
     | '/settings/calendar'
     | '/settings/reminders'
+    | '/settings/'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -166,6 +176,7 @@ export interface FileRouteTypes {
     | '/settings/billing'
     | '/settings/calendar'
     | '/settings/reminders'
+    | '/settings'
   id:
     | '__root__'
     | '/'
@@ -181,6 +192,7 @@ export interface FileRouteTypes {
     | '/settings/billing'
     | '/settings/calendar'
     | '/settings/reminders'
+    | '/settings/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -197,6 +209,7 @@ export interface RootRouteChildren {
   SettingsBillingRoute: typeof SettingsBillingRoute
   SettingsCalendarRoute: typeof SettingsCalendarRoute
   SettingsRemindersRoute: typeof SettingsRemindersRoute
+  SettingsIndexRoute: typeof SettingsIndexRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -271,6 +284,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof InviteTokenRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/settings/': {
+      id: '/settings/'
+      path: '/settings'
+      fullPath: '/settings/'
+      preLoaderRoute: typeof SettingsIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/settings/billing': {
       id: '/settings/billing'
       path: '/settings/billing'
@@ -309,6 +329,7 @@ const rootRouteChildren: RootRouteChildren = {
   SettingsBillingRoute: SettingsBillingRoute,
   SettingsCalendarRoute: SettingsCalendarRoute,
   SettingsRemindersRoute: SettingsRemindersRoute,
+  SettingsIndexRoute: SettingsIndexRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

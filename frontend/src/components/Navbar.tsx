@@ -3,6 +3,7 @@ import { Link } from '@tanstack/react-router'
 import { ArrowRight, Menu, X } from 'lucide-react'
 import { BrandMark } from './BrandMark'
 import { ThemeToggle } from './ThemeToggle'
+import { UserAvatar } from './UserAvatar'
 
 import { useAuth } from '../lib/auth-context'
 
@@ -96,11 +97,13 @@ export function Navbar({ className = '', brandHref, variant }: NavbarProps) {
 
           <Link
             className={`hidden md:inline-flex items-center gap-2 ml-5 px-[15px] py-[9px] rounded-full text-[0.74rem] font-bold transition-all duration-200 hover:-translate-y-0.5 shadow-sm ${ctaClasses}`}
-            to="/profile"
+            to="/settings"
           >
-            <div className="w-4 h-4 rounded-full bg-[#1f2937] text-[#fed7aa] flex items-center justify-center text-[0.6rem] font-bold">
-              {user.name ? user.name[0].toUpperCase() : 'U'}
-            </div>
+            <UserAvatar
+              user={user}
+              className="h-4 w-4 text-[0.6rem]"
+              tone="bg-[#1f2937] text-[#fed7aa]"
+            />
             <span>{user.name?.split(' ')[0] || 'PROFILE'}</span>
           </Link>
         </>
@@ -190,7 +193,7 @@ export function Navbar({ className = '', brandHref, variant }: NavbarProps) {
                     <ArrowRight size={15} />
                   </Link>
                   <Link
-                    to="/profile"
+                    to="/settings"
                     onClick={() => setMenuOpen(false)}
                     className="flex items-center justify-center gap-2 px-5 py-[12px] rounded-full btn-primary-inverse font-bold text-[0.88rem] mt-1 shadow-[0_4px_14px_rgba(0,0,0,0.2)] transition-colors"
                   >

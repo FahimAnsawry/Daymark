@@ -1,9 +1,8 @@
-import { createFileRoute } from '@tanstack/react-router'
+import { createFileRoute, redirect } from '@tanstack/react-router'
 
+// Profile now lives in Settings; keep old links working.
 export const Route = createFileRoute('/profile')({
-  component: RouteComponent,
+  beforeLoad: () => {
+    throw redirect({ to: '/settings', replace: true })
+  },
 })
-
-function RouteComponent() {
-  return <div>Hello "/profile"!</div>
-}

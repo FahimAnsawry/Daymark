@@ -26,6 +26,7 @@ import { useBilling, useCancelTrial } from '../lib/billing'
 import { lockedSuffix, type PlanId } from '../lib/plans'
 import { PlanLock } from './PlanLock'
 import { ThemeToggle } from './ThemeToggle'
+import { UserAvatar } from './UserAvatar'
 
 export type DashboardView =
   | 'inbox'
@@ -145,9 +146,10 @@ export function DashboardSidebar(p: Props) {
               aria-haspopup="menu"
               onClick={() => setAccountMenuOpen((x) => !x)}
             >
-              <span className="grid h-[29px] w-[29px] shrink-0 place-items-center rounded-full bg-[#c2410c] text-[13px] font-bold text-white dark:bg-[#fed7aa] dark:text-[#1f2937]">
-                {user?.name?.[0]?.toUpperCase() || 'D'}
-              </span>
+              <UserAvatar
+                user={{ name: user?.name ?? '', avatar: user?.avatar }}
+                className="h-[29px] w-[29px] text-[13px]"
+              />
               {!p.isCollapsed && (
                 <span className="flex items-center gap-[7px] text-[#1f2937] dark:text-[#f3f4f6]">
                   {user?.name || 'Daymark'} <ChevronDown size={14} />
@@ -160,7 +162,7 @@ export function DashboardSidebar(p: Props) {
                 role="menu"
               >
                 <Link
-                  to="/profile"
+                  to="/settings"
                   className={sidebarMenuItemClass}
                   role="menuitem"
                   onClick={() => {

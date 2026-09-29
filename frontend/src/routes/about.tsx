@@ -4,6 +4,7 @@ import { createFileRoute, Link } from '@tanstack/react-router'
 import { BrandMark } from '../components/BrandMark'
 import { Navbar } from '../components/Navbar'
 import { SiteFooter } from '../components/SiteFooter'
+import { GuestOnly } from '../components/GuestOnly'
 
 export const Route = createFileRoute('/about')({
   component: AboutPage,
@@ -33,18 +34,20 @@ const focusRing =
 
 function AboutPage() {
   return (
-    <div className="min-h-screen overflow-x-clip bg-[#f7f6f2] text-[#1f2937] caret-[#ea580c] transition-colors duration-250 selection:bg-[#fed7aa] selection:text-[#1f2937] dark:bg-app-background dark:text-[#f3f4f6]">
-      <Navbar variant="light" />
+    <GuestOnly>
+      <div className="min-h-screen overflow-x-clip bg-[#f7f6f2] text-[#1f2937] caret-[#ea580c] transition-colors duration-250 selection:bg-[#fed7aa] selection:text-[#1f2937] dark:bg-app-background dark:text-[#f3f4f6]">
+        <Navbar variant="light" />
 
-      <main>
-        <Hero />
-        <Principles />
-        <IsAndIsnt />
-        <Closing />
-      </main>
+        <main>
+          <Hero />
+          <Principles />
+          <IsAndIsnt />
+          <Closing />
+        </main>
 
-      <SiteFooter />
-    </div>
+        <SiteFooter />
+      </div>
+    </GuestOnly>
   )
 }
 

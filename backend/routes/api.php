@@ -58,6 +58,8 @@ Route::prefix('auth')->group(function () {
         Route::get('/me', [AuthController::class, 'me']);
         Route::put('/profile', [AuthController::class, 'updateProfile']);
         Route::put('/password', [AuthController::class, 'updatePassword']);
+        Route::post('/avatar', [AuthController::class, 'updateAvatar']);
+        Route::delete('/avatar', [AuthController::class, 'destroyAvatar']);
         Route::put('/preferences', [AuthController::class, 'updatePreferences']);
         Route::post('/logout', [AuthController::class, 'logout']);
     });
