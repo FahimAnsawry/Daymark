@@ -69,7 +69,7 @@ import {
   type Reminder,
   type Task,
 } from '../lib/tasks'
-/** The current view and All Tasks chip live in the URL, so a reload keeps them. */
+/** The current view and Completed Tasks chip live in the URL, so a reload keeps them. */
 /** `calendar` is how Google's consent screen reports back; it's shown once, then dropped. */
 type DashboardSearch = {
   view?: DashboardView
@@ -97,11 +97,7 @@ export const Route = createFileRoute('/dashboard')({
 const today = () => new Date().toLocaleDateString('en-CA')
 const DATE_FILTERS = [
   ['any', 'Any date'],
-  ['overdue', 'Overdue'],
   ['today', 'Today'],
-  ['tomorrow', 'Tomorrow'],
-  ['week', 'Next 7 days'],
-  ['none', 'No date'],
   ['custom', 'Custom date'],
 ] as const
 const TYPE_FILTERS = [
@@ -122,16 +118,10 @@ const dashboardPrimaryClass =
   'inline-flex cursor-pointer items-center justify-center gap-[9px] rounded-full border-0 btn-primary px-[15px] py-[9px] text-sm font-medium uppercase tracking-[0.05em] transition-colors duration-150 motion-reduce:transition-none'
 const sortChipClass =
   'inline-flex h-7 cursor-pointer items-center rounded-full border border-[#d9dee7] bg-transparent px-2.5 text-xs font-medium text-[#475467] transition-colors duration-150 hover:border-[#c2410c] hover:text-[#c2410c] focus-visible:border-[#c2410c] focus-visible:text-[#c2410c] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange-500 dark:border-[#424242] dark:text-[#c9ced6] dark:hover:border-[#fed7aa] dark:hover:text-[#fed7aa] dark:focus-visible:border-[#fed7aa] dark:focus-visible:text-[#fed7aa] dark:focus-visible:outline-[#fed7aa] max-[620px]:hidden motion-reduce:transition-none'
-const matchesDate = (t: Task, f: DateFilter, done: boolean, custom: string) => {
-  const now = today()
+const matchesDate = (t: Task, f: DateFilter, custom: string) => {
   if (f === 'any') return true
-  if (f === 'none') return !t.due
-  if (!t.due) return false
-  if (f === 'custom') return t.due === custom
-  if (f === 'overdue') return !done && t.due < now
-  if (f === 'today') return t.due === now
-  if (f === 'tomorrow') return t.due === moveDate(new Date(), 1)
-  return t.due >= now && t.due <= moveDate(new Date(), 7)
+  if (f === 'today') return t.due === today()
+  return t.due === custom
 }
 const matchesType = (t: Task, f: TypeFilter) => {
   if (f === 'daily') return !t.reminder
@@ -150,7 +140,7 @@ function DashboardPage() {
   const nav = useNavigate()
   const searchParams = Route.useSearch()
   const navigateSearch = useNavigate({ from: Route.fullPath })
-  const view = searchParams.view ?? 'filters'
+  const view = searchParams.view ?? 'today'
   const filter = searchParams.label ?? ''
   const [dateFilter, setDateFilter] = useState<DateFilter>('any')
   const [customDate, setCustomDate] = useState(() => today())
@@ -283,7 +273,7 @@ function DashboardPage() {
       !createProjectMutation.isPending &&
       !projects.includes(view.slice(8))
     )
-      void navigateSearch({ search: (prev) => ({ ...prev, view: 'filters' }), replace: true })
+      void navigateSearch({ search: (prev) => ({ ...prev, view: 'today' }), replace: true })
   }, [view, projects, projectsQuery.isSuccess, createProjectMutation.isPending, navigateSearch])
   useEffect(() => {
     if (view === 'search') search.current?.focus()
@@ -376,8 +366,9 @@ function DashboardPage() {
               : view === 'search'
                 ? t.title.toLowerCase().includes(query.toLowerCase())
                 : view === 'filters'
-                  ? (!filter || t.label.toLowerCase() === filter.toLowerCase()) &&
-                    matchesDate(t, dateFilter, isTaskDone(t), customDate) &&
+                  ? isTaskDone(t) &&
+                    (!filter || t.label.toLowerCase() === filter.toLowerCase()) &&
+                    matchesDate(t, dateFilter, customDate) &&
                     matchesType(t, typeFilter)
                   : view.startsWith('project:')
                     ? t.project === view.slice(8)
@@ -411,7 +402,7 @@ function DashboardPage() {
           inbox: 'Inbox',
           today: 'Today',
           upcoming: 'Upcoming',
-          filters: 'All Tasks',
+          filters: 'Completed Tasks',
           reporting: 'Reporting',
           focus: 'Focus sessions',
           shared: 'Shared projects',
@@ -484,7 +475,7 @@ function DashboardPage() {
     } else if (deleteTarget.type === 'project') {
       const { projectName } = deleteTarget
       deleteProjectMutation.mutate(projectName)
-      if (view === `project:${projectName}`) go('filters')
+      if (view === `project:${projectName}`) go('today')
       setProject((current) => (current === projectName ? '' : current))
     }
     setDeleteTarget(null)
@@ -603,31 +594,39 @@ function DashboardPage() {
       >
         {isReminder ? (
           <div
-            className={`grid size-5 shrink-0 place-items-center ${
+            className={`grid size-7 shrink-0 place-items-center rounded-full ${
               done
-                ? 'rounded-full border border-[#c2410c] bg-[#c2410c] text-white dark:border-[#fed7aa] dark:bg-[#fed7aa] dark:text-[#1f2937]'
-                : 'text-orange-600 dark:text-orange-400'
+                ? 'bg-green-600/12 text-green-600 dark:bg-green-500/15 dark:text-green-400'
+                : 'bg-orange-500/12 text-[#c2410c] dark:bg-orange-400/15 dark:text-orange-300'
             }`}
-            title={
-              done
-                ? 'Completed'
-                : `Reminder: ${reminderLabel(t.reminder, t.reminder_frequency, t.reminder_early) || 'Scheduled'}`
-            }
-            aria-label={done ? `Completed reminder: ${t.title}` : `Reminder: ${t.title}`}
+            title={`Reminder: ${reminderLabel(t.reminder, t.reminder_frequency, t.reminder_early) || 'Scheduled'}${done ? ' (completed)' : ''}`}
+            aria-label={`${done ? 'Completed reminder' : 'Reminder'}: ${t.title}`}
           >
-            {done ? <Check size={13} /> : <Bell size={14} aria-hidden="true" />}
+            <Bell
+              size={15}
+              strokeWidth={2}
+              aria-hidden="true"
+              className="origin-top group-hover:animate-bell-ring motion-reduce:animate-none"
+            />
           </div>
         ) : (
           <button
             className={`grid size-5 shrink-0 cursor-pointer place-items-center rounded-full border ${
               done
-                ? 'border-[#c2410c] bg-[#c2410c] text-white dark:border-[#fed7aa] dark:bg-[#fed7aa] dark:text-[#1f2937]'
+                ? 'animate-check-pop border-green-600 bg-green-600 text-white motion-reduce:animate-none dark:border-green-500 dark:bg-green-500 dark:text-white'
                 : 'border-[#667085] bg-transparent text-white'
             }`}
             aria-label={done ? `Uncomplete ${t.title}` : `Complete ${t.title}`}
             onClick={() => completeTask(t)}
           >
-            {done && <Check size={13} />}
+            {done && (
+              <Check
+                size={13}
+                strokeWidth={3}
+                aria-hidden="true"
+                className="animate-check-draw motion-reduce:animate-none"
+              />
+            )}
           </button>
         )}
         <div className="grid flex-1 gap-[5px]">
@@ -1398,7 +1397,7 @@ function DashboardPage() {
           onClose={() => setShareTarget(null)}
           onLeft={() => {
             setShareTarget(null)
-            go('filters')
+            go('today')
           }}
         />
       )}

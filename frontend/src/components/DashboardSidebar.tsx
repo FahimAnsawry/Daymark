@@ -75,9 +75,9 @@ type Props = {
 /** Sidebar views; the last value is the plan a view needs, shown as a lock when missing. */
 const items: readonly [DashboardView, string, typeof Search, PlanId | null][] = [
   ['search', 'Search', Search, null],
-  ['filters', 'All Tasks', LayoutGrid, null],
   ['today', 'Today', CalendarDays, null],
   ['upcoming', 'Upcoming', CalendarDays, null],
+  ['filters', 'Completed Tasks', LayoutGrid, null],
   ['reporting', 'Reporting', ChartNoAxesCombined, null],
   ['focus', 'Focus sessions', Timer, 'plus'],
   ['shared', 'Shared projects', UsersRound, 'pro'],
