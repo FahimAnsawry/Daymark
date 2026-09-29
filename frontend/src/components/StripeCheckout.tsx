@@ -22,7 +22,6 @@ type Props = {
   trialDays: number
   chargeDate: Date
   defaultEmail: string
-  defaultName?: string
   onBack: () => void
   /** Records the plan; a rejection shows its message and lets the person try again. */
   onSubscribe: (card: CardSummary) => Promise<void>
@@ -97,7 +96,6 @@ export function StripeCheckout({
   trialDays,
   chargeDate,
   defaultEmail,
-  defaultName = '',
   onBack,
   onSubscribe,
   onComplete,
@@ -106,16 +104,23 @@ export function StripeCheckout({
   const [cardNumber, setCardNumber] = useState('')
   const [expiry, setExpiry] = useState('')
   const [cvc, setCvc] = useState('')
-  const [name, setName] = useState(defaultName || 'Test Customer')
+  const [name, setName] = useState('')
   const [country, setCountry] = useState<(typeof COUNTRIES)[number]['code']>('US')
-  const [postal, setPostal] = useState(TEST_POSTAL['US'] ?? '10001')
+  const [postal, setPostal] = useState('')
   const [errors, setErrors] = useState<Errors>({})
   const [status, setStatus] = useState<'idle' | 'processing' | 'succeeded'>('idle')
   const [submitError, setSubmitError] = useState<string>()
   const cardErrorId = useId()
-  const timers = useRef<number[]>([])
+  const mounted = useRef(true)
+  const onCompleteRef = useRef(onComplete)
+  onCompleteRef.current = onComplete
 
-  useEffect(() => () => timers.current.forEach((t) => window.clearTimeout(t)), [])
+  useEffect(() => {
+    mounted.current = true
+    return () => {
+      mounted.current = false
+    }
+  }, [])
 
   const cardDigits = digitsOnly(cardNumber)
   const brand = detectBrand(cardDigits)
@@ -159,15 +164,20 @@ export function StripeCheckout({
     setSubmitError(undefined)
     const card: CardSummary = { brand: brand ?? undefined, last4: cardDigits.slice(-4) }
     // Keep a short "processing" beat so the simulation feels like a real checkout.
-    const minimumWait = new Promise((resolve) =>
-      timers.current.push(window.setTimeout(resolve, 1400)),
-    )
+    // Do not cancel these timers on unmount: starting a trial updates the plan, which
+    // can replace gated screens (and this checkout) before the thank-you navigation runs.
+    const minimumWait = new Promise((resolve) => window.setTimeout(resolve, 1400))
     Promise.all([onSubscribe(card), minimumWait])
       .then(() => {
-        setStatus('succeeded')
-        timers.current.push(window.setTimeout(() => onComplete(card), 800))
+        if (mounted.current) {
+          setStatus('succeeded')
+          window.setTimeout(() => onCompleteRef.current(card), 800)
+        } else {
+          onCompleteRef.current(card)
+        }
       })
       .catch((error: unknown) => {
+        if (!mounted.current) return
         setStatus('idle')
         setSubmitError(
           error instanceof Error && error.message
@@ -179,12 +189,12 @@ export function StripeCheckout({
 
   const fillTestCard = () => {
     const nextYear = String((new Date().getFullYear() + 3) % 100).padStart(2, '0')
-    if (!/^\S+@\S+\.\S+$/.test(email)) setEmail(defaultEmail || 'test@example.com')
+    if (!/^\S+@\S+\.\S+$/.test(email)) setEmail('test@example.com')
     setCardNumber('4242 4242 4242 4242')
     setExpiry(`12 / ${nextYear}`)
     setCvc('123')
-    setName(defaultName || name.trim() || 'Test Customer')
-    setPostal(TEST_POSTAL[country] ?? '10001')
+    if (!name.trim()) setName('Test Customer')
+    if (!postal.trim()) setPostal(TEST_POSTAL[country] ?? '')
     setErrors({})
   }
 
@@ -378,17 +388,11 @@ export function StripeCheckout({
               </div>
             </div>
             <FieldError id={cardErrorId} message={errors.card} />
-            <p className="m-0 mt-1.5 text-[12px] text-[#6d6e78]">
-              Test mode: use 4242 4242 4242 4242, any future date and any CVC, or click{' '}
-              <button
-                type="button"
-                onClick={fillTestCard}
-                className="cursor-pointer border-0 bg-transparent p-0 font-semibold text-[#c2410c] underline hover:text-[#9a3412]"
-              >
-                Fill test card
-              </button>
-              .
-            </p>
+            {!errors.card && (
+              <p className="m-0 mt-1.5 text-[12px] text-[#6d6e78]">
+                Test mode: use 4242 4242 4242 4242, any future date and any CVC.
+              </p>
+            )}
 
             <FieldLabel htmlFor="checkout-name" className="mt-4">
               Cardholder name
