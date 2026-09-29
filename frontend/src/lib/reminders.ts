@@ -15,6 +15,17 @@ export const isReminderTime = (
   reminder: Reminder | null | undefined,
 ): reminder is `${string}:${string}` => !!reminder && /^([01]\d|2[0-3]):[0-5]\d$/.test(reminder)
 
+/** True when a reminder on `due` (default today) at `time` has already passed. */
+export const isPastReminder = (due: string | null | undefined, time: string | null | undefined) => {
+  if (!time) return false
+  const now = new Date()
+  const date = due || localDate(now)
+  const [hours, minutes] = time.split(':').map(Number)
+  const at = new Date(`${date}T00:00:00`)
+  at.setHours(hours, minutes, 0, 0)
+  return at.getTime() < now.getTime()
+}
+
 /** "17:00" in the viewer's own clock format, like "5:00 PM". */
 export const formatClockTime = (time: string) => {
   const [hours, minutes] = time.split(':').map(Number)

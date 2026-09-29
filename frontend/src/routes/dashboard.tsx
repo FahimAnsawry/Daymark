@@ -183,7 +183,7 @@ function DashboardPage() {
     [time, setTime] = useState(''),
     [repeat, setRepeat] = useState<NonNullable<Task['repeat']>>('none'),
     [reminder, setReminder] = useState<ReminderSetting>(null),
-    [taskType, setTaskType] = useState<'normal' | 'reminder'>('normal'),
+    [taskType, setTaskType] = useState<'daily' | 'reminder'>('daily'),
     [focusTask, setFocusTask] = useState<Task | null>(null),
     [shareTarget, setShareTarget] = useState<ProjectRow | null>(null),
     [query, setQuery] = useState(''),
@@ -310,6 +310,14 @@ function DashboardPage() {
     }
   }, [sorting])
   useEffect(() => {
+    if (!adding) return
+    const previous = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    return () => {
+      document.body.style.overflow = previous
+    }
+  }, [adding])
+  useEffect(() => {
     if (!adding) {
       dialogReturnFocus.current?.focus()
       dialogReturnFocus.current = null
@@ -415,7 +423,7 @@ function DashboardPage() {
     setTime('')
     setRepeat('none')
     setReminder(null)
-    setTaskType('normal')
+    setTaskType('daily')
     setAdding(false)
   }
   const createProject = () => {
@@ -456,7 +464,7 @@ function DashboardPage() {
     setTime('')
     setRepeat('none')
     setReminder(null)
-    setTaskType('normal')
+    setTaskType('daily')
     setLabelOpen(Boolean(label))
     setAdding(true)
   }
@@ -566,11 +574,7 @@ function DashboardPage() {
                 ? 'Completed'
                 : `Reminder: ${reminderLabel(t.reminder, t.reminder_frequency, t.reminder_early) || 'Scheduled'}`
             }
-            aria-label={
-              done
-                ? `Completed reminder: ${t.title}`
-                : `Reminder: ${t.title}`
-            }
+            aria-label={done ? `Completed reminder: ${t.title}` : `Reminder: ${t.title}`}
           >
             {done ? <Check size={13} /> : <Bell size={14} aria-hidden="true" />}
           </div>
@@ -592,9 +596,7 @@ function DashboardPage() {
             <button
               type="button"
               className={`text-left border-0 bg-transparent p-0 cursor-pointer text-sm hover:underline ${
-                done
-                  ? 'text-[#667085] dark:text-[#a7b0bf]'
-                  : 'text-[#1f2937] dark:text-[#f3f4f6]'
+                done ? 'text-[#667085] dark:text-[#a7b0bf]' : 'text-[#1f2937] dark:text-[#f3f4f6]'
               }`}
               title="Click to edit task"
               onClick={() => setEditingTask(t)}
@@ -864,259 +866,273 @@ function DashboardPage() {
             )}
           </header>
           {adding && (
-            <form
-              aria-label="Add task"
-              className="relative z-20 mb-8 rounded-2xl border border-[#d9dee7] bg-white p-[15px] text-[#1f2937] shadow-[0_12px_32px_#0002] dark:border-[#424242] dark:bg-[#292929] dark:text-[#f2f2f2] max-[620px]:p-3"
-              onSubmit={(event) => {
-                event.preventDefault()
-                add()
+            <div
+              className="fixed inset-0 z-[70] flex items-start justify-center overflow-y-auto bg-black/60 p-4 pt-[12vh] backdrop-blur-[2px] animate-dialog-fade-in motion-reduce:animate-none max-[620px]:pt-[6vh]"
+              onMouseDown={(event) => {
+                if (event.target === event.currentTarget) closeAddDialog()
               }}
+              role="presentation"
             >
-              <div className="mb-2.5 flex items-center gap-1.5">
-                <button
-                  type="button"
-                  className={`cursor-pointer rounded-full px-2.5 py-1 text-xs font-semibold transition-colors ${
-                    taskType === 'normal'
-                      ? 'bg-[#1f2937] text-white dark:bg-[#f2f2f2] dark:text-[#1f1f1f]'
-                      : 'bg-[#f4f1e9] text-[#667085] hover:bg-[#e9e5da] dark:bg-[#383838] dark:text-[#a7b0bf] dark:hover:bg-[#444]'
-                  }`}
-                  onClick={() => {
-                    setTaskType('normal')
-                    setReminder(null)
-                  }}
-                >
-                  Normal task
-                </button>
-                <button
-                  type="button"
-                  className={`flex cursor-pointer items-center gap-1 rounded-full px-2.5 py-1 text-xs font-semibold transition-colors ${
-                    taskType === 'reminder'
-                      ? 'bg-orange-600 text-white dark:bg-orange-500'
-                      : 'bg-[#f4f1e9] text-[#667085] hover:bg-[#e9e5da] dark:bg-[#383838] dark:text-[#a7b0bf] dark:hover:bg-[#444]'
-                  }`}
-                  aria-label={`Reminder task${hasPlus ? '' : lockedSuffix('plus')}`}
-                  aria-haspopup={hasPlus ? undefined : 'dialog'}
-                  onClick={() => {
-                    // Reminders are part of Plus; the API rejects them for free accounts.
-                    if (!hasPlus) {
-                      setUpgradeOpen(true)
-                      return
-                    }
-                    setTaskType('reminder')
-                    if (!reminder) {
-                      setReminder({
-                        reminder: (time || '09:00') as Reminder,
-                        early: false,
-                        frequency: null,
-                      })
-                    }
-                    if (!due) setDue(today())
-                  }}
-                >
-                  <Bell size={12} aria-hidden="true" />
-                  Reminder task
-                  {!hasPlus && <PlanLock plan="plus" className="ml-0.5" />}
-                </button>
-              </div>
-              <input
-                ref={taskInput}
-                autoFocus
-                required
-                className="mb-3 box-border w-full border-0 bg-transparent px-0 py-1 text-[19px] leading-7 text-[#1f2937] outline-none placeholder:text-[#667085] focus:shadow-none dark:text-[#f5f5f5] dark:placeholder:text-[#aaa]"
-                value={draft}
-                onChange={(event) => setDraft(event.target.value)}
-                placeholder="What needs doing?"
-                aria-label="Task title"
-              />
-              <div className="flex flex-wrap items-center gap-[6px]">
-                <button
-                  type="button"
-                  className="grid size-[35px] cursor-pointer place-items-center rounded-lg border-0 bg-[#f4f1e9] text-[#27352f] hover:bg-[#e9e5da] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange-500 dark:bg-[#484848] dark:text-[#dedede] dark:hover:bg-[#555] dark:focus-visible:outline-[#fed7aa]"
-                  aria-label="More task options"
-                  aria-expanded={labelOpen}
-                  onClick={() => setLabelOpen((open) => !open)}
-                >
-                  <Plus size={20} aria-hidden="true" />
-                </button>
-                <div ref={projectPicker} className="relative">
+              <form
+                role="dialog"
+                aria-modal="true"
+                aria-label="Add task"
+                className="relative w-full max-w-[600px] animate-dialog-slide-up motion-reduce:animate-none rounded-2xl border border-[#d9dee7] bg-white p-[15px] text-[#1f2937] shadow-[0_12px_32px_#0002] dark:border-[#424242] dark:bg-[#292929] dark:text-[#f2f2f2] max-[620px]:p-3"
+                onSubmit={(event) => {
+                  event.preventDefault()
+                  add()
+                }}
+              >
+                <div className="mb-2.5 flex items-center gap-1.5">
                   <button
-                    ref={projectTrigger}
                     type="button"
-                    className="flex min-h-[35px] max-w-[160px] cursor-pointer items-center gap-[7px] rounded-lg border border-[#d9dee7] bg-transparent px-[10px] text-sm text-[#1f2937] hover:bg-[#f4f1e9] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange-500 dark:border-[#484848] dark:text-[#f2f2f2] dark:hover:bg-[#383838] dark:focus-visible:outline-[#fed7aa]"
-                    aria-label={`Project: ${project || 'No project'}`}
-                    aria-haspopup="listbox"
-                    aria-expanded={projectPickerOpen}
-                    aria-controls="task-project-options"
+                    className={`cursor-pointer rounded-full px-2.5 py-1 text-xs font-semibold transition-colors ${
+                      taskType === 'daily'
+                        ? 'bg-[#1f2937] text-white dark:bg-[#f2f2f2] dark:text-[#1f1f1f]'
+                        : 'bg-[#f4f1e9] text-[#667085] hover:bg-[#e9e5da] dark:bg-[#383838] dark:text-[#a7b0bf] dark:hover:bg-[#444]'
+                    }`}
                     onClick={() => {
-                      setDatePickerOpen(false)
-                      setProjectSearch('')
-                      setProjectPickerOpen((open) => !open)
+                      setTaskType('daily')
+                      setReminder(null)
                     }}
                   >
-                    <Inbox size={16} aria-hidden="true" className="shrink-0" />
-                    <span className="truncate">{project || 'No project'}</span>
+                    Daily task
                   </button>
-                  {projectPickerOpen && (
-                    <div className="absolute left-[-96px] top-[calc(100%+7px)] z-30 w-[calc(100vw-40px)] max-w-[376px] overflow-hidden rounded-xl border border-[#d9dee7] bg-white p-[10px] text-[#1f2937] shadow-[0_16px_36px_#0002] dark:border-[#454545] dark:bg-[#292929] dark:text-[#f2f2f2] dark:shadow-[0_16px_36px_#0007] max-[620px]:left-[-42px]">
-                      <input
-                        ref={projectSearchInput}
-                        className="box-border h-10 w-full rounded-lg border border-[#d9dee7] bg-transparent px-3 text-[15px] text-[#1f2937] outline-none placeholder:text-[#667085] focus:border-orange-500 dark:border-[#5d5d5d] dark:text-[#f2f2f2] dark:placeholder:text-[#aaa] dark:focus:border-[#a5a5a5]"
-                        value={projectSearch}
-                        onChange={(event) => setProjectSearch(event.target.value)}
-                        onKeyDown={(event) => {
-                          if (event.key !== 'Enter') return
-                          event.preventDefault()
-                          if (!projectSearch.trim() || (noProjectMatches && !projectMatches.length))
-                            chooseProject('')
-                          else if (projectMatches.length) chooseProject(projectMatches[0])
-                          else createProjectFromTask()
-                        }}
-                        placeholder="Type a project name"
-                        aria-label="Search projects"
-                        aria-controls="task-project-options"
-                      />
-                      <div
-                        id="task-project-options"
-                        role="listbox"
-                        aria-label="Projects"
-                        className="mt-[10px] max-h-56 overflow-y-auto"
-                      >
-                        {noProjectMatches && (
-                          <button
-                            type="button"
-                            role="option"
-                            aria-selected={!project}
-                            className="flex min-h-10 w-full cursor-pointer items-center gap-3 rounded-lg border-0 bg-transparent px-3 text-left text-sm text-[#1f2937] hover:bg-[#f4f1e9] focus-visible:bg-[#f4f1e9] focus-visible:outline-2 focus-visible:outline-orange-500 aria-selected:bg-[#f4f1e9] dark:text-[#f2f2f2] dark:hover:bg-[#393939] dark:focus-visible:bg-[#393939] dark:focus-visible:outline-[#fed7aa] dark:aria-selected:bg-[#393939]"
-                            onClick={() => chooseProject('')}
-                          >
-                            <Inbox
-                              size={18}
-                              aria-hidden="true"
-                              className="text-[#667085] dark:text-[#d0d0d0]"
-                            />
-                            <span className="flex-1">No project</span>
-                            {!project && <Check size={16} aria-hidden="true" />}
-                          </button>
-                        )}
-                        {projectMatches.map((name) => (
-                          <button
-                            key={name}
-                            type="button"
-                            role="option"
-                            aria-selected={project === name}
-                            className="flex min-h-10 w-full cursor-pointer items-center gap-3 rounded-lg border-0 bg-transparent px-3 text-left text-sm text-[#1f2937] hover:bg-[#f4f1e9] focus-visible:bg-[#f4f1e9] focus-visible:outline-2 focus-visible:outline-orange-500 aria-selected:bg-[#f4f1e9] dark:text-[#f2f2f2] dark:hover:bg-[#393939] dark:focus-visible:bg-[#393939] dark:focus-visible:outline-[#fed7aa] dark:aria-selected:bg-[#393939]"
-                            onClick={() => chooseProject(name)}
-                          >
-                            <Inbox
-                              size={18}
-                              aria-hidden="true"
-                              className="text-[#667085] dark:text-[#d0d0d0]"
-                            />
-                            <span className="min-w-0 flex-1 truncate">{name}</span>
-                            {project === name && <Check size={16} aria-hidden="true" />}
-                          </button>
-                        ))}
-                        {canCreateProject && (
-                          <button
-                            type="button"
-                            className="flex min-h-10 w-full cursor-pointer items-center gap-3 rounded-lg border-0 bg-transparent px-3 text-left text-sm text-[#1f2937] hover:bg-[#f4f1e9] focus-visible:bg-[#f4f1e9] focus-visible:outline-2 focus-visible:outline-orange-500 dark:text-[#f2f2f2] dark:hover:bg-[#393939] dark:focus-visible:bg-[#393939] dark:focus-visible:outline-[#fed7aa]"
-                            onClick={createProjectFromTask}
-                          >
-                            <Plus size={18} aria-hidden="true" />
-                            <span className="min-w-0 flex-1 truncate">
-                              Create “{projectSearch.trim()}”
-                            </span>
-                          </button>
-                        )}
-                      </div>
-                    </div>
-                  )}
+                  <button
+                    type="button"
+                    className={`flex cursor-pointer items-center gap-1 rounded-full px-2.5 py-1 text-xs font-semibold transition-colors ${
+                      taskType === 'reminder'
+                        ? 'bg-orange-600 text-white dark:bg-orange-500'
+                        : 'bg-[#f4f1e9] text-[#667085] hover:bg-[#e9e5da] dark:bg-[#383838] dark:text-[#a7b0bf] dark:hover:bg-[#444]'
+                    }`}
+                    aria-label={`Reminder task${hasPlus ? '' : lockedSuffix('plus')}`}
+                    aria-haspopup={hasPlus ? undefined : 'dialog'}
+                    onClick={() => {
+                      // Reminders are part of Plus; the API rejects them for free accounts.
+                      if (!hasPlus) {
+                        setUpgradeOpen(true)
+                        return
+                      }
+                      setTaskType('reminder')
+                      if (!reminder) {
+                        setReminder({
+                          reminder: (time || '09:00') as Reminder,
+                          early: false,
+                          frequency: null,
+                        })
+                      }
+                      if (!due) setDue(today())
+                    }}
+                  >
+                    <Bell size={12} aria-hidden="true" />
+                    Reminder task
+                    {!hasPlus && <PlanLock plan="plus" className="ml-0.5" />}
+                  </button>
                 </div>
-                <div ref={datePicker} className="relative">
+                <input
+                  ref={taskInput}
+                  autoFocus
+                  required
+                  className="mb-3 box-border w-full border-0 bg-transparent px-0 py-1 text-[19px] leading-7 text-[#1f2937] outline-none placeholder:text-[#667085] focus:shadow-none dark:text-[#f5f5f5] dark:placeholder:text-[#aaa]"
+                  value={draft}
+                  onChange={(event) => setDraft(event.target.value)}
+                  placeholder="What needs doing?"
+                  aria-label="Task title"
+                />
+                <div className="flex flex-wrap items-center gap-[6px]">
                   <button
-                    ref={dateTrigger}
                     type="button"
-                    className="flex min-h-[35px] cursor-pointer items-center gap-[7px] rounded-lg border border-[#d9dee7] bg-transparent px-[10px] text-sm text-[#1f2937] hover:bg-[#f4f1e9] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange-500 dark:border-[#484848] dark:text-[#f2f2f2] dark:hover:bg-[#383838] dark:focus-visible:outline-[#fed7aa]"
-                    aria-label={`Date: ${due || 'None'}`}
-                    aria-haspopup="dialog"
-                    aria-expanded={datePickerOpen}
-                    onClick={() => {
-                      setProjectPickerOpen(false)
-                      setDatePickerOpen((open) => !open)
-                    }}
+                    className="grid size-[35px] cursor-pointer place-items-center rounded-lg border-0 bg-[#f4f1e9] text-[#27352f] hover:bg-[#e9e5da] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange-500 dark:bg-[#484848] dark:text-[#dedede] dark:hover:bg-[#555] dark:focus-visible:outline-[#fed7aa]"
+                    aria-label="More task options"
+                    aria-expanded={labelOpen}
+                    onClick={() => setLabelOpen((open) => !open)}
                   >
-                    <CalendarDays size={16} aria-hidden="true" />
-                    <span>{due ? dl(due) : 'Date'}</span>
+                    <Plus size={20} aria-hidden="true" />
                   </button>
-                  {datePickerOpen && (
-                    <TaskDatePicker
-                      due={due}
-                      time={time}
-                      repeat={repeat}
-                      onSelect={(date) => {
-                        setDue(date)
+                  <div ref={projectPicker} className="relative">
+                    <button
+                      ref={projectTrigger}
+                      type="button"
+                      className="flex min-h-[35px] max-w-[160px] cursor-pointer items-center gap-[7px] rounded-lg border border-[#d9dee7] bg-transparent px-[10px] text-sm text-[#1f2937] hover:bg-[#f4f1e9] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange-500 dark:border-[#484848] dark:text-[#f2f2f2] dark:hover:bg-[#383838] dark:focus-visible:outline-[#fed7aa]"
+                      aria-label={`Project: ${project || 'No project'}`}
+                      aria-haspopup="listbox"
+                      aria-expanded={projectPickerOpen}
+                      aria-controls="task-project-options"
+                      onClick={() => {
                         setDatePickerOpen(false)
-                        dateTrigger.current?.focus()
+                        setProjectSearch('')
+                        setProjectPickerOpen((open) => !open)
                       }}
-                      onTimeChange={(value) => {
-                        if (!due) setDue(today())
-                        setTime(value)
+                    >
+                      <Inbox size={16} aria-hidden="true" className="shrink-0" />
+                      <span className="truncate">{project || 'No project'}</span>
+                    </button>
+                    {projectPickerOpen && (
+                      <div className="absolute left-[-96px] top-[calc(100%+7px)] z-30 w-[calc(100vw-40px)] max-w-[376px] overflow-hidden rounded-xl border border-[#d9dee7] bg-white p-[10px] text-[#1f2937] shadow-[0_16px_36px_#0002] dark:border-[#454545] dark:bg-[#292929] dark:text-[#f2f2f2] dark:shadow-[0_16px_36px_#0007] max-[620px]:left-[-42px]">
+                        <input
+                          ref={projectSearchInput}
+                          className="box-border h-10 w-full rounded-lg border border-[#d9dee7] bg-transparent px-3 text-[15px] text-[#1f2937] outline-none placeholder:text-[#667085] focus:border-orange-500 dark:border-[#5d5d5d] dark:text-[#f2f2f2] dark:placeholder:text-[#aaa] dark:focus:border-[#a5a5a5]"
+                          value={projectSearch}
+                          onChange={(event) => setProjectSearch(event.target.value)}
+                          onKeyDown={(event) => {
+                            if (event.key !== 'Enter') return
+                            event.preventDefault()
+                            if (
+                              !projectSearch.trim() ||
+                              (noProjectMatches && !projectMatches.length)
+                            )
+                              chooseProject('')
+                            else if (projectMatches.length) chooseProject(projectMatches[0])
+                            else createProjectFromTask()
+                          }}
+                          placeholder="Type a project name"
+                          aria-label="Search projects"
+                          aria-controls="task-project-options"
+                        />
+                        <div
+                          id="task-project-options"
+                          role="listbox"
+                          aria-label="Projects"
+                          className="mt-[10px] max-h-56 overflow-y-auto"
+                        >
+                          {noProjectMatches && (
+                            <button
+                              type="button"
+                              role="option"
+                              aria-selected={!project}
+                              className="flex min-h-10 w-full cursor-pointer items-center gap-3 rounded-lg border-0 bg-transparent px-3 text-left text-sm text-[#1f2937] hover:bg-[#f4f1e9] focus-visible:bg-[#f4f1e9] focus-visible:outline-2 focus-visible:outline-orange-500 aria-selected:bg-[#f4f1e9] dark:text-[#f2f2f2] dark:hover:bg-[#393939] dark:focus-visible:bg-[#393939] dark:focus-visible:outline-[#fed7aa] dark:aria-selected:bg-[#393939]"
+                              onClick={() => chooseProject('')}
+                            >
+                              <Inbox
+                                size={18}
+                                aria-hidden="true"
+                                className="text-[#667085] dark:text-[#d0d0d0]"
+                              />
+                              <span className="flex-1">No project</span>
+                              {!project && <Check size={16} aria-hidden="true" />}
+                            </button>
+                          )}
+                          {projectMatches.map((name) => (
+                            <button
+                              key={name}
+                              type="button"
+                              role="option"
+                              aria-selected={project === name}
+                              className="flex min-h-10 w-full cursor-pointer items-center gap-3 rounded-lg border-0 bg-transparent px-3 text-left text-sm text-[#1f2937] hover:bg-[#f4f1e9] focus-visible:bg-[#f4f1e9] focus-visible:outline-2 focus-visible:outline-orange-500 aria-selected:bg-[#f4f1e9] dark:text-[#f2f2f2] dark:hover:bg-[#393939] dark:focus-visible:bg-[#393939] dark:focus-visible:outline-[#fed7aa] dark:aria-selected:bg-[#393939]"
+                              onClick={() => chooseProject(name)}
+                            >
+                              <Inbox
+                                size={18}
+                                aria-hidden="true"
+                                className="text-[#667085] dark:text-[#d0d0d0]"
+                              />
+                              <span className="min-w-0 flex-1 truncate">{name}</span>
+                              {project === name && <Check size={16} aria-hidden="true" />}
+                            </button>
+                          ))}
+                          {canCreateProject && (
+                            <button
+                              type="button"
+                              className="flex min-h-10 w-full cursor-pointer items-center gap-3 rounded-lg border-0 bg-transparent px-3 text-left text-sm text-[#1f2937] hover:bg-[#f4f1e9] focus-visible:bg-[#f4f1e9] focus-visible:outline-2 focus-visible:outline-orange-500 dark:text-[#f2f2f2] dark:hover:bg-[#393939] dark:focus-visible:bg-[#393939] dark:focus-visible:outline-[#fed7aa]"
+                              onClick={createProjectFromTask}
+                            >
+                              <Plus size={18} aria-hidden="true" />
+                              <span className="min-w-0 flex-1 truncate">
+                                Create “{projectSearch.trim()}”
+                              </span>
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                  <div ref={datePicker} className="relative">
+                    <button
+                      ref={dateTrigger}
+                      type="button"
+                      className="flex min-h-[35px] cursor-pointer items-center gap-[7px] rounded-lg border border-[#d9dee7] bg-transparent px-[10px] text-sm text-[#1f2937] hover:bg-[#f4f1e9] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange-500 dark:border-[#484848] dark:text-[#f2f2f2] dark:hover:bg-[#383838] dark:focus-visible:outline-[#fed7aa]"
+                      aria-label={`Date: ${due || 'None'}`}
+                      aria-haspopup="dialog"
+                      aria-expanded={datePickerOpen}
+                      onClick={() => {
+                        setProjectPickerOpen(false)
+                        setDatePickerOpen((open) => !open)
                       }}
-                      onRepeatChange={(value) => {
-                        if (!due && value !== 'none') setDue(today())
-                        setRepeat(value)
+                    >
+                      <CalendarDays size={16} aria-hidden="true" />
+                      <span>{due ? dl(due) : 'Date'}</span>
+                    </button>
+                    {datePickerOpen && (
+                      <TaskDatePicker
+                        due={due}
+                        time={time}
+                        repeat={repeat}
+                        onSelect={(date) => {
+                          setDue(date)
+                          setDatePickerOpen(false)
+                          dateTrigger.current?.focus()
+                        }}
+                        onTimeChange={(value) => {
+                          if (!due) setDue(today())
+                          setTime(value)
+                        }}
+                        onRepeatChange={(value) => {
+                          if (!due && value !== 'none') setDue(today())
+                          setRepeat(value)
+                        }}
+                      />
+                    )}
+                  </div>
+                  {taskType === 'reminder' && (
+                    <ReminderPicker
+                      value={reminder?.reminder ?? null}
+                      early={reminder?.early ?? false}
+                      frequency={reminder?.frequency ?? null}
+                      onChange={(next) => {
+                        if (next && !due) setDue(today())
+                        setReminder(next)
+                        if (!next) setTaskType('daily')
                       }}
+                      locked={!hasPlus}
+                      onUpgrade={() => setUpgradeOpen(true)}
+                      hasDueDate={!!due}
+                      due={due}
+                      suggestedTime={time}
                     />
                   )}
+                  <div className="ml-auto flex items-center gap-2">
+                    <button
+                      type="button"
+                      className="grid size-[35px] cursor-pointer place-items-center border-0 bg-transparent text-[#667085] hover:text-[#1f2937] focus-visible:outline-2 focus-visible:outline-orange-500 dark:text-[#ccc] dark:hover:text-white dark:focus-visible:outline-[#fed7aa]"
+                      aria-label="Cancel task"
+                      onClick={closeAddDialog}
+                    >
+                      <X size={22} aria-hidden="true" strokeWidth={1.5} />
+                    </button>
+                    <button
+                      type="submit"
+                      className="grid size-10 cursor-pointer place-items-center rounded-xl border-0 btn-primary disabled:cursor-not-allowed disabled:opacity-50"
+                      aria-label="Add task"
+                      disabled={!draft.trim()}
+                    >
+                      <Send size={20} aria-hidden="true" />
+                    </button>
+                  </div>
                 </div>
-                {taskType === 'reminder' && (
-                  <ReminderPicker
-                    value={reminder?.reminder ?? null}
-                    early={reminder?.early ?? false}
-                    frequency={reminder?.frequency ?? null}
-                    onChange={(next) => {
-                      if (next && !due) setDue(today())
-                      setReminder(next)
-                      if (!next) setTaskType('normal')
-                    }}
-                    locked={!hasPlus}
-                    onUpgrade={() => setUpgradeOpen(true)}
-                    hasDueDate={!!due}
-                    suggestedTime={time}
-                  />
+                {labelOpen && (
+                  <label className="mt-3 flex items-center gap-2 border-t border-[#d9dee7] pt-3 text-sm text-[#475467] dark:border-[#424242] dark:text-[#ccc]">
+                    <SlidersHorizontal size={16} aria-hidden="true" /> Label
+                    <input
+                      className="min-w-0 flex-1 border-0 bg-transparent text-[#1f2937] outline-none placeholder:text-[#667085] dark:text-[#f2f2f2] dark:placeholder:text-[#aaa]"
+                      value={label}
+                      onChange={(event) => setLabel(event.target.value)}
+                      placeholder="Optional"
+                      aria-label="Task label"
+                    />
+                  </label>
                 )}
-                <div className="ml-auto flex items-center gap-2">
-                  <button
-                    type="button"
-                    className="grid size-[35px] cursor-pointer place-items-center border-0 bg-transparent text-[#667085] hover:text-[#1f2937] focus-visible:outline-2 focus-visible:outline-orange-500 dark:text-[#ccc] dark:hover:text-white dark:focus-visible:outline-[#fed7aa]"
-                    aria-label="Cancel task"
-                    onClick={closeAddDialog}
-                  >
-                    <X size={22} aria-hidden="true" strokeWidth={1.5} />
-                  </button>
-                  <button
-                    type="submit"
-                    className="grid size-10 cursor-pointer place-items-center rounded-xl border-0 btn-primary disabled:cursor-not-allowed disabled:opacity-50"
-                    aria-label="Add task"
-                    disabled={!draft.trim()}
-                  >
-                    <Send size={20} aria-hidden="true" />
-                  </button>
-                </div>
-              </div>
-              {labelOpen && (
-                <label className="mt-3 flex items-center gap-2 border-t border-[#d9dee7] pt-3 text-sm text-[#475467] dark:border-[#424242] dark:text-[#ccc]">
-                  <SlidersHorizontal size={16} aria-hidden="true" /> Label
-                  <input
-                    className="min-w-0 flex-1 border-0 bg-transparent text-[#1f2937] outline-none placeholder:text-[#667085] dark:text-[#f2f2f2] dark:placeholder:text-[#aaa]"
-                    value={label}
-                    onChange={(event) => setLabel(event.target.value)}
-                    placeholder="Optional"
-                    aria-label="Task label"
-                  />
-                </label>
-              )}
-            </form>
+              </form>
+            </div>
           )}
           {view === 'search' && (
             <div className="mb-[26px] flex items-center gap-3 border-b border-[#d9dee7] py-3 text-[#667085] dark:border-[#383838] dark:text-[#a7b0bf]">
@@ -1245,7 +1261,7 @@ function DashboardPage() {
                       </div>
                     )}
                   </div>
-                ) : adding ? null : (
+                ) : (
                   <Empty view={view} onAdd={open} />
                 )
               ) : view === 'inbox' ? (
@@ -1291,7 +1307,7 @@ function DashboardPage() {
                   {visible.length ? (
                     <div>{visible.map(renderTaskRow)}</div>
                   ) : (
-                    !adding && <Empty view={view} cleared={sortedCount > 0} />
+                    <Empty view={view} cleared={sortedCount > 0} />
                   )}
                 </>
               ) : visible.length ? (
@@ -1304,7 +1320,7 @@ function DashboardPage() {
                     <Plus size={18} /> Add task
                   </button>
                 </div>
-              ) : adding ? null : (
+              ) : (
                 <Empty view={view} onAdd={open} />
               )}
             </>

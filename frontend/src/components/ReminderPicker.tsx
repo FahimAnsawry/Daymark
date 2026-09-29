@@ -3,6 +3,7 @@ import { useEffect, useId, useRef, useState } from 'react'
 import {
   FREQUENCY_OPTIONS,
   formatClockTime,
+  isPastReminder,
   reminderLabel,
   type ReminderSetting,
 } from '../lib/reminders'
@@ -23,6 +24,8 @@ type Props = {
   onUpgrade: () => void
   /** Reminders go out on the task's date; without one, the caller dates the task today. */
   hasDueDate: boolean
+  /** The task's date, used to refuse a reminder time that has already passed. */
+  due?: string
   /** The task's own time, suggested when there's no reminder yet. */
   suggestedTime?: string
   variant?: 'field' | 'icon'
@@ -50,6 +53,7 @@ export function ReminderPicker({
   locked,
   onUpgrade,
   hasDueDate,
+  due,
   suggestedTime,
   variant = 'field',
   taskTitle,
@@ -97,8 +101,10 @@ export function ReminderPicker({
     trigger.current?.focus()
   }
 
+  const isPast = isPastReminder(due, draftTime)
+
   const save = () => {
-    if (!draftTime) return
+    if (!draftTime || isPast) return
     close()
     if (locked) onUpgrade()
     else onChange({ reminder: draftTime as Reminder, early: draftEarly, frequency: draftFrequency })
@@ -180,6 +186,11 @@ export function ReminderPicker({
               className="h-8 rounded-md border border-[#d9dee7] bg-transparent px-1.5 text-sm text-inherit focus-visible:outline-2 focus-visible:outline-orange-500 dark:border-[#484848] dark:[color-scheme:dark]"
             />
           </div>
+          {isPast && (
+            <p role="alert" className="m-0 mt-1.5 text-[12px] text-[#b42318] dark:text-[#fda29b]">
+              That time has already passed. Pick a later time.
+            </p>
+          )}
           {!hasDueDate && (
             <p className="m-0 mt-1.5 text-[12px] text-[#667085] dark:text-[#a7b0bf]">
               The task has no date, so this starts today.
@@ -239,7 +250,7 @@ export function ReminderPicker({
             )}
             <button
               type="button"
-              disabled={!draftTime}
+              disabled={!draftTime || isPast}
               onClick={save}
               className="ml-auto h-8 cursor-pointer rounded-md border-0 px-3 text-sm font-medium btn-primary disabled:cursor-not-allowed disabled:opacity-50"
             >

@@ -1,7 +1,7 @@
 import { Calendar, Clock, Folder, RotateCw, Tag, Trash2, X } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import type { Reminder, Repeat, Task, TaskChanges } from '../lib/tasks'
-import type { ReminderSetting } from '../lib/reminders'
+import { isPastReminder, type ReminderSetting } from '../lib/reminders'
 
 type Props = {
   task: Task | null
@@ -78,10 +78,12 @@ export function EditTaskDialog({
   if (!isOpen || !task) return null
 
   const isExistingReminderTask = Boolean(task.reminder)
+  const reminderMoved = isExistingReminderTask && (time !== task.reminder || due !== (task.due || ''))
+  const reminderInPast = reminderMoved && isPastReminder(due, time)
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
-    if (!title.trim()) return
+    if (!title.trim() || reminderInPast) return
 
     const reminderValue = isExistingReminderTask
       ? (time || reminder?.reminder || task.reminder)
@@ -148,7 +150,7 @@ export function EditTaskDialog({
             />
           </div>
 
-          <div className="grid grid-cols-2 gap-3 max-[520px]:grid-cols-1">
+          <div className="grid grid-cols-2 gap-x-3 gap-y-4 max-[520px]:grid-cols-1">
             <div>
               <label className="mb-1.5 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-[#667085] dark:text-[#a7b0bf]">
                 <Calendar size={13} /> Due Date
@@ -161,28 +163,31 @@ export function EditTaskDialog({
                 onChange={(e) => setDue(e.target.value)}
               />
             </div>
-            <div>
-              <label className="mb-1.5 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-[#667085] dark:text-[#a7b0bf]">
-                <Clock size={13} /> {isExistingReminderTask ? 'Time' : 'Time (optional)'}
-              </label>
-              <input
-                type="time"
-                required={isExistingReminderTask}
-                className="box-border h-10 w-full rounded-lg border border-[#d9dee7] bg-white px-3 text-sm text-[#1f2937] outline-none focus:border-orange-500 dark:border-[#424242] dark:bg-[#1e1e1e] dark:text-[#f2f2f2] dark:focus:border-orange-400"
-                value={time}
-                onChange={(e) => {
-                  const val = e.target.value
-                  setTime(val)
-                  if (isExistingReminderTask) {
+            {isExistingReminderTask && (
+              <div>
+                <label className="mb-1.5 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-[#667085] dark:text-[#a7b0bf]">
+                  <Clock size={13} /> Time
+                </label>
+                <input
+                  type="time"
+                  required
+                  className="box-border h-10 w-full rounded-lg border border-[#d9dee7] bg-white px-3 text-sm text-[#1f2937] outline-none focus:border-orange-500 dark:border-[#424242] dark:bg-[#1e1e1e] dark:text-[#f2f2f2] dark:focus:border-orange-400"
+                  value={time}
+                  onChange={(e) => {
+                    const val = e.target.value
+                    setTime(val)
                     setReminder((prev) => ({
                       reminder: (val || '09:00') as Reminder,
                       early: prev?.early ?? false,
                       frequency: prev?.frequency ?? null,
                     }))
-                  }
-                }}
-              />
-              {isExistingReminderTask && (
+                  }}
+                />
+                {reminderInPast && (
+                  <p role="alert" className="m-0 mt-1.5 text-xs text-red-600 dark:text-red-400">
+                    That time has already passed. Pick a later time.
+                  </p>
+                )}
                 <label className="mt-1.5 flex cursor-pointer items-center gap-1.5 text-xs text-[#667085] dark:text-[#a7b0bf]">
                   <input
                     type="checkbox"
@@ -198,11 +203,8 @@ export function EditTaskDialog({
                   />
                   <span>10 minutes before</span>
                 </label>
-              )}
-            </div>
-          </div>
-
-          <div className="grid grid-cols-2 gap-3 max-[520px]:grid-cols-1">
+              </div>
+            )}
             <div>
               <label className="mb-1.5 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-[#667085] dark:text-[#a7b0bf]">
                 <Folder size={13} /> Project
@@ -220,21 +222,23 @@ export function EditTaskDialog({
                 ))}
               </select>
             </div>
-            <div>
-              <label className="mb-1.5 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-[#667085] dark:text-[#a7b0bf]">
-                <RotateCw size={13} /> Repeat
-              </label>
-              <select
-                className="box-border h-10 w-full rounded-lg border border-[#d9dee7] bg-white px-3 text-sm text-[#1f2937] outline-none focus:border-orange-500 dark:border-[#424242] dark:bg-[#1e1e1e] dark:text-[#f2f2f2] dark:focus:border-orange-400"
-                value={repeat}
-                onChange={(e) => setRepeat(e.target.value as Repeat)}
-              >
-                <option value="none">Does not repeat</option>
-                <option value="daily">Daily</option>
-                <option value="weekly">Weekly</option>
-                <option value="monthly">Monthly</option>
-              </select>
-            </div>
+            {isExistingReminderTask && (
+              <div>
+                <label className="mb-1.5 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-[#667085] dark:text-[#a7b0bf]">
+                  <RotateCw size={13} /> Repeat
+                </label>
+                <select
+                  className="box-border h-10 w-full rounded-lg border border-[#d9dee7] bg-white px-3 text-sm text-[#1f2937] outline-none focus:border-orange-500 dark:border-[#424242] dark:bg-[#1e1e1e] dark:text-[#f2f2f2] dark:focus:border-orange-400"
+                  value={repeat}
+                  onChange={(e) => setRepeat(e.target.value as Repeat)}
+                >
+                  <option value="none">Does not repeat</option>
+                  <option value="daily">Daily</option>
+                  <option value="weekly">Weekly</option>
+                  <option value="monthly">Monthly</option>
+                </select>
+              </div>
+            )}
           </div>
 
           <div>
@@ -273,7 +277,7 @@ export function EditTaskDialog({
               <button
                 type="submit"
                 className="cursor-pointer rounded-full bg-orange-600 px-5 py-2 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-orange-700 active:bg-orange-800 disabled:opacity-50 dark:bg-orange-600 dark:hover:bg-orange-500"
-                disabled={!title.trim()}
+                disabled={!title.trim() || reminderInPast}
               >
                 Save Changes
               </button>
