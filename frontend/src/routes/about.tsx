@@ -241,7 +241,7 @@ function PrincipleCard({
   return (
     <li
       data-reveal="pending"
-      className="reveal-card reveal-rise flex flex-col rounded-2xl bg-white p-7 sm:p-8 dark:bg-[#262626]"
+      className="reveal-card reveal-rise group flex flex-col rounded-2xl bg-white p-7 sm:p-8 dark:bg-[#262626]"
       style={{ '--card-index': index } as CSSProperties}
     >
       <div
@@ -260,22 +260,23 @@ function PrincipleCard({
   )
 }
 
-// Many faint open loops settle into one clear next step.
+// Many faint open loops settle into one clear next step. On hover the noise recedes
+// and the next step comes forward.
 function ClarityVignette() {
   return (
     <div className="grid w-full gap-2.5">
       {['w-4/5', 'w-3/5', 'w-2/3'].map((width, i) => (
         <span
           key={width}
-          className={`reveal-fade h-2 rounded-full bg-[#d4dbd2] dark:bg-[#383838] ${width}`}
-          style={revealDelay(300 + i * 90)}
+          className={`reveal-fade h-2 origin-left rounded-full bg-[#d4dbd2] transition-[opacity,scale] duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] group-hover:scale-x-[0.8] group-hover:opacity-45 dark:bg-[#383838] ${width}`}
+          style={{ ...revealDelay(300 + i * 90), transitionDelay: `${i * 60}ms` }}
         />
       ))}
       <span
         style={revealDelay(620)}
-        className="reveal-lift mt-1.5 inline-flex w-fit items-center gap-2 rounded-full bg-[#183b37] py-1.5 pr-4 pl-2 text-[0.84rem] font-semibold text-white dark:bg-[#fed7aa] dark:text-[#1f2937]"
+        className="reveal-lift mt-1.5 inline-flex w-fit origin-left items-center gap-2 rounded-full bg-[#183b37] py-1.5 pr-4 pl-2 text-[0.84rem] font-semibold text-white transition-[scale,box-shadow] duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] group-hover:scale-[1.04] group-hover:shadow-[0_6px_16px_-6px_rgba(24,59,55,0.55)] dark:bg-[#fed7aa] dark:text-[#1f2937] dark:group-hover:shadow-[0_6px_16px_-6px_rgba(254,215,170,0.35)]"
       >
-        <span className="grid size-5 place-items-center rounded-full bg-white/15 dark:bg-[#1f2937]/10">
+        <span className="grid size-5 place-items-center rounded-full bg-white/15 transition-transform duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] group-hover:translate-x-0.5 dark:bg-[#1f2937]/10">
           <ArrowRight size={12} strokeWidth={2.5} />
         </span>
         Finish the proposal draft
@@ -301,7 +302,7 @@ function LifeVignette() {
       >
         <span className="text-[#fed7aa]">Room to live</span>
         <span className="px-1.5 text-white/50">·</span>
-        Dinner with Priya
+        Call Mum, 7pm
       </span>
       <span
         className="reveal-rise flex items-center gap-2.5 text-[0.86rem] text-[#5d6a62] dark:text-[#a7b0bf]"

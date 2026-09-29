@@ -41,8 +41,12 @@ function applyBillingChange(queryClient: QueryClient, status: BillingStatus) {
   void queryClient.invalidateQueries({ queryKey: ['reports'] })
 }
 
+/**
+ * Records the plan on the server but does not touch the cache: applying the new plan
+ * re-renders gated screens under the checkout, so the caller applies it (with
+ * `useApplyBillingChange`) once it has navigated to the thank-you page.
+ */
 export function useSubscribe() {
-  const queryClient = useQueryClient()
   return useMutation({
     mutationFn: async (input: { plan: PlanId; period: BillingPeriod; card: CardSummary }) => {
       try {
@@ -57,8 +61,12 @@ export function useSubscribe() {
         throw new Error(errorMessage(error, 'We couldn’t start your trial. Please try again.'))
       }
     },
-    onSuccess: (status) => applyBillingChange(queryClient, status),
   })
+}
+
+export function useApplyBillingChange() {
+  const queryClient = useQueryClient()
+  return (status: BillingStatus) => applyBillingChange(queryClient, status)
 }
 
 /** Switch between Plus and Pro, keeping the period, card and any remaining trial. */

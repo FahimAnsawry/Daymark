@@ -141,13 +141,13 @@ export function AuthDayPreview({ mode }: AuthDayPreviewProps) {
 
         <p
           className="m-0 mt-5 rounded-xl bg-[#183b37] px-5 py-4 font-display text-[1.08rem] font-medium tracking-[-0.02em] text-[#FFFFFF] xl:text-[1.15rem]"
-          aria-label="Room to live: Dinner with Priya, 7pm"
+          aria-label="Room to live: Call Mum, 7pm"
         >
           <span className="text-[#fed7aa]">Room to live</span>
           <span aria-hidden="true" className="px-2 text-[#FFFFFF]/50">
             ·
           </span>
-          Dinner with Priya, 7pm
+          Call Mum, 7pm
         </p>
 
         <section className="mt-6" aria-label="Parked for later">
