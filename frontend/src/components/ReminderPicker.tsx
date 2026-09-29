@@ -186,11 +186,6 @@ export function ReminderPicker({
               className="h-8 rounded-md border border-[#d9dee7] bg-transparent px-1.5 text-sm text-inherit focus-visible:outline-2 focus-visible:outline-orange-500 dark:border-[#484848] dark:[color-scheme:dark]"
             />
           </div>
-          {isPast && (
-            <p role="alert" className="m-0 mt-1.5 text-[12px] text-[#b42318] dark:text-[#fda29b]">
-              That time has already passed. Pick a later time.
-            </p>
-          )}
           {!hasDueDate && (
             <p className="m-0 mt-1.5 text-[12px] text-[#667085] dark:text-[#a7b0bf]">
               The task has no date, so this starts today.

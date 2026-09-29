@@ -50,7 +50,7 @@ class TaskApiTest extends TestCase
     {
         Sanctum::actingAs(User::factory()->create());
 
-        $this->postJson('/api/tasks', ['title' => 'Inbox item', 'due' => '', 'project' => '', 'label' => '', 'time' => ''])
+        $this->postJson('/api/tasks', ['title' => 'Loose item', 'due' => '', 'project' => '', 'label' => '', 'time' => ''])
             ->assertCreated()
             ->assertJsonPath('data.due', '')
             ->assertJsonPath('data.project', '')

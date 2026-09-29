@@ -12,6 +12,7 @@ import {
   useUploadAvatar,
 } from '../lib/account'
 import type { User } from '../lib/auth-context'
+import { setSkipCompleteConfirm, useSkipCompleteConfirm } from '../lib/complete-confirm'
 import { errorMessage } from '../lib/billing'
 import { useTheme, type Theme } from '../lib/theme-context'
 import {
@@ -31,6 +32,7 @@ export function ProfileSettings({ user }: { user: User }) {
       <AboutPanel user={user} />
       <SignInPanel user={user} />
       <AppearancePanel />
+      <TasksPanel />
     </div>
   )
 }
@@ -413,6 +415,46 @@ function AppearancePanel() {
           ))}
         </div>
       </fieldset>
+    </section>
+  )
+}
+
+function TasksPanel() {
+  const skip = useSkipCompleteConfirm()
+  const ask = !skip
+
+  return (
+    <section aria-labelledby="tasks-pref-title" className={panel}>
+      <h2 id="tasks-pref-title" className={headingClass}>
+        Tasks
+      </h2>
+      <div className="mt-4 flex items-center justify-between gap-4">
+        <div>
+          <p id="confirm-complete-label" className="m-0 text-sm font-medium">
+            Ask before marking a task complete
+          </p>
+          <p className={`m-0 mt-0.5 text-sm ${mutedText}`}>
+            A quick check so a stray click doesn't finish the wrong task.
+          </p>
+        </div>
+        <button
+          type="button"
+          role="switch"
+          aria-checked={ask}
+          aria-labelledby="confirm-complete-label"
+          onClick={() => setSkipCompleteConfirm(ask)}
+          className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer items-center rounded-full border-0 p-0 transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange-500 ${
+            ask ? 'bg-[#c2410c] dark:bg-[#fed7aa]' : 'bg-[#c7cfc2] dark:bg-[#424242]'
+          }`}
+        >
+          <span
+            aria-hidden="true"
+            className={`size-5 rounded-full bg-white shadow-[0_1px_3px_rgba(16,24,40,0.25)] transition-transform duration-200 ease-[cubic-bezier(0.16,1,0.3,1)] motion-reduce:transition-none dark:bg-[#1f2937] ${
+              ask ? 'translate-x-[22px]' : 'translate-x-0.5'
+            }`}
+          />
+        </button>
+      </div>
     </section>
   )
 }

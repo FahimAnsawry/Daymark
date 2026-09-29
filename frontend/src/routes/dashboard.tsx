@@ -8,9 +8,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Clock3,
-  CornerDownLeft,
-  FolderInput,
-  Inbox,
+  Folder,
   Menu,
   PanelLeftClose,
   PanelLeftOpen,
@@ -36,8 +34,8 @@ import { ConfirmDeleteDialog } from '../components/ConfirmDeleteDialog'
 import { ConfirmCompleteDialog } from '../components/ConfirmCompleteDialog'
 import { EditTaskDialog } from '../components/EditTaskDialog'
 import { FocusPanel } from '../components/FocusPanel'
-import { CalendarSettings } from '../components/CalendarSettings'
 import { FocusView } from '../components/FocusView'
+import { HelpView } from '../components/HelpView'
 import { LoadingPage } from '../components/LoadingPage'
 import { PlanLock } from '../components/PlanLock'
 import { lockedSuffix } from '../lib/plans'
@@ -46,11 +44,17 @@ import { ReminderSettings } from '../components/ReminderSettings'
 import { ShareProjectDialog } from '../components/ShareProjectDialog'
 import { SharedProjectsView } from '../components/SharedProjectsView'
 import { TaskReport } from '../components/TaskReport'
-import { TodayCalendar } from '../components/TodayCalendar'
 import { UpgradeDialog } from '../components/UpgradeDialog'
 import { useAuth, usePlan } from '../lib/auth-context'
 import { useBilling, useCancelTrial } from '../lib/billing'
-import { reminderLabel, useReminderNotifications, type ReminderSetting } from '../lib/reminders'
+import { useSkipCompleteConfirm } from '../lib/complete-confirm'
+import { useCurrentFocus } from '../lib/focus'
+import {
+  isPastReminder,
+  reminderLabel,
+  useReminderNotifications,
+  type ReminderSetting,
+} from '../lib/reminders'
 import { assignablePeople, takePendingInvite, useProjectMembers } from '../lib/sharing'
 import {
   localDate,
@@ -70,11 +74,9 @@ import {
   type Task,
 } from '../lib/tasks'
 /** The current view and Completed Tasks chip live in the URL, so a reload keeps them. */
-/** `calendar` is how Google's consent screen reports back; it's shown once, then dropped. */
 type DashboardSearch = {
   view?: DashboardView
   label?: string
-  calendar?: 'connected' | 'error'
 }
 const URL_VIEWS = [...LINKABLE_VIEWS, 'search', 'notifications'] as const
 export const Route = createFileRoute('/dashboard')({
@@ -88,9 +90,6 @@ export const Route = createFileRoute('/dashboard')({
     return {
       ...(isKnownView && { view: view as DashboardView }),
       ...(label && { label }),
-      ...((search.calendar === 'connected' || search.calendar === 'error') && {
-        calendar: search.calendar,
-      }),
     }
   },
 })
@@ -116,8 +115,6 @@ const dashboardIconButtonClass =
   'grid size-8 cursor-pointer place-items-center rounded-md border-0 bg-transparent p-[5px] text-[#1f2937] transition-colors duration-150 hover:bg-orange-500/15 hover:text-orange-500 focus-visible:bg-orange-500/15 focus-visible:text-orange-500 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange-500 dark:text-[#f3f4f6] dark:hover:text-orange-400 dark:focus-visible:text-orange-400 dark:focus-visible:outline-orange-400 motion-reduce:transition-none'
 const dashboardPrimaryClass =
   'inline-flex cursor-pointer items-center justify-center gap-[9px] rounded-full border-0 btn-primary px-[15px] py-[9px] text-sm font-medium uppercase tracking-[0.05em] transition-colors duration-150 motion-reduce:transition-none'
-const sortChipClass =
-  'inline-flex h-7 cursor-pointer items-center rounded-full border border-[#d9dee7] bg-transparent px-2.5 text-xs font-medium text-[#475467] transition-colors duration-150 hover:border-[#c2410c] hover:text-[#c2410c] focus-visible:border-[#c2410c] focus-visible:text-[#c2410c] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange-500 dark:border-[#424242] dark:text-[#c9ced6] dark:hover:border-[#fed7aa] dark:hover:text-[#fed7aa] dark:focus-visible:border-[#fed7aa] dark:focus-visible:text-[#fed7aa] dark:focus-visible:outline-[#fed7aa] max-[620px]:hidden motion-reduce:transition-none'
 const matchesDate = (t: Task, f: DateFilter, custom: string) => {
   if (f === 'any') return true
   if (f === 'today') return t.due === today()
@@ -132,6 +129,13 @@ const filterSelectClass =
   'h-9 cursor-pointer rounded-full border border-[#d9dee7] bg-white px-3 text-sm text-[#1f2937] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange-500 dark:border-[#383838] dark:bg-[#262626] dark:text-[#f3f4f6]'
 const dl = (d: string) =>
   new Date(`${d}T12:00:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+/** How long ago a past due date was, e.g. "Yesterday" or "5 days late". */
+const daysLate = (d: string) => {
+  const days = Math.round(
+    (new Date(`${today()}T12:00:00`).getTime() - new Date(`${d}T12:00:00`).getTime()) / 86_400_000,
+  )
+  return days === 1 ? 'Yesterday' : `${days} days late`
+}
 /** Optimistically added tasks have a temporary negative id until the server responds. */
 const isSaved = (task: Task) => task.id > 0
 const NO_TASKS: Task[] = []
@@ -145,20 +149,7 @@ function DashboardPage() {
   const [dateFilter, setDateFilter] = useState<DateFilter>('any')
   const [customDate, setCustomDate] = useState(() => today())
   const [typeFilter, setTypeFilter] = useState<TypeFilter>('all')
-  const calendarResult = searchParams.calendar
-  useEffect(() => {
-    if (!calendarResult) return
-    if (calendarResult === 'connected') toast.success('Google Calendar is connected.')
-    else toast.error('We couldn’t connect Google Calendar. Please try again.')
-    void navigateSearch({
-      search: (prev) => ({ ...prev, calendar: undefined }),
-      replace: true,
-    })
-  }, [calendarResult, navigateSearch])
   const setView = (next: DashboardView) => {
-    // Changing views closes any open sort menu and resets Inbox's "cleared" moment.
-    setSorting(null)
-    setSortedCount(0)
     void navigateSearch({ search: (prev) => ({ ...prev, view: next }), replace: true })
   }
   const setFilter = (next: string) =>
@@ -180,6 +171,8 @@ function DashboardPage() {
   const projects = projectsQuery.data ?? NO_PROJECTS
   const createTaskMutation = useCreateTask()
   const completeTaskMutation = useCompleteTask()
+  const skipCompleteConfirm = useSkipCompleteConfirm()
+  const focusingTaskId = useCurrentFocus(hasPlus).data?.task_id ?? null
   const updateTaskMutation = useUpdateTask()
   const deleteTaskMutation = useDeleteTask()
   const createProjectMutation = useCreateProject()
@@ -214,9 +207,6 @@ function DashboardPage() {
     [focusTask, setFocusTask] = useState<Task | null>(null),
     [shareTarget, setShareTarget] = useState<ProjectRow | null>(null),
     [query, setQuery] = useState(''),
-    [quickDraft, setQuickDraft] = useState(''),
-    [sorting, setSorting] = useState<{ taskId: number; kind: 'date' | 'project' } | null>(null),
-    [sortedCount, setSortedCount] = useState(0),
     [calendarMonth, setCalendarMonth] = useState(() => {
       const next = new Date()
       next.setDate(next.getDate() + 1)
@@ -236,8 +226,6 @@ function DashboardPage() {
   const projectPicker = useRef<HTMLDivElement>(null)
   const datePicker = useRef<HTMLDivElement>(null)
   const taskInput = useRef<HTMLInputElement>(null)
-  const quickAddInput = useRef<HTMLInputElement>(null)
-  const sortMenu = useRef<HTMLDivElement>(null)
   const dialogReturnFocus = useRef<HTMLElement | null>(null)
   useEffect(() => {
     if (!isLoading && !isAuthenticated) void nav({ to: '/login' })
@@ -319,24 +307,6 @@ function DashboardPage() {
     return () => document.removeEventListener('pointerdown', onPointerDown)
   }, [datePickerOpen])
   useEffect(() => {
-    if (!sorting) return
-    const onPointerDown = (event: PointerEvent) => {
-      if (!sortMenu.current?.contains(event.target as Node)) setSorting(null)
-    }
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key !== 'Escape') return
-      event.preventDefault()
-      setSorting(null)
-      sortMenu.current?.querySelector<HTMLButtonElement>('[data-sort-trigger]')?.focus()
-    }
-    document.addEventListener('pointerdown', onPointerDown)
-    document.addEventListener('keydown', onKeyDown)
-    return () => {
-      document.removeEventListener('pointerdown', onPointerDown)
-      document.removeEventListener('keydown', onKeyDown)
-    }
-  }, [sorting])
-  useEffect(() => {
     if (!adding) return
     const previous = document.body.style.overflow
     document.body.style.overflow = 'hidden'
@@ -356,13 +326,17 @@ function DashboardPage() {
   const visible = useMemo(
     () =>
       tasks.filter((t) =>
-        view === 'inbox'
-          ? !isTaskDone(t) && !t.due && !t.project
-          : view === 'today'
-            ? t.due === today() ||
-              (isTaskDone(t) && Boolean(t.completed_at && t.completed_at.slice(0, 10) === today()))
-            : view === 'upcoming'
-              ? !isTaskDone(t) && !!t.due && t.due > today()
+        view === 'today'
+          ? t.due === today() ||
+            // A repeating task completed today rolls its due date forward; keep it listed as done.
+            (isTaskDone(t) &&
+              Boolean(t.completed_at && t.completed_at.slice(0, 10) === today()) &&
+              Boolean(t.due && t.due > today()) &&
+              ((t.repeat && t.repeat !== 'none') || Boolean(t.reminder_frequency)))
+          : view === 'upcoming'
+            ? !isTaskDone(t) && !!t.due && t.due > today()
+            : view === 'due'
+              ? !isTaskDone(t) && !!t.due && t.due < today()
               : view === 'search'
                 ? t.title.toLowerCase().includes(query.toLowerCase())
                 : view === 'filters'
@@ -382,6 +356,18 @@ function DashboardPage() {
     [visible, view],
   )
 
+  /** Overdue tasks grouped by the day they were due, oldest first. */
+  const dueGroups = useMemo(() => {
+    if (view !== 'due') return []
+    const sorted = [...visible].sort(
+      (a, b) =>
+        (a.due ?? '').localeCompare(b.due ?? '') || (a.time ?? '').localeCompare(b.time ?? ''),
+    )
+    const groups = new Map<string, Task[]>()
+    for (const task of sorted) groups.set(task.due!, [...(groups.get(task.due!) ?? []), task])
+    return [...groups]
+  }, [visible, view])
+
   const todayCompletedTasks = useMemo(
     () => (view === 'today' ? visible.filter((t) => isTaskDone(t)) : []),
     [visible, view],
@@ -394,20 +380,19 @@ function DashboardPage() {
   const canCreateProject =
     !!projectSearch.trim() &&
     !projects.some((name) => name.toLowerCase() === projectSearch.trim().toLowerCase()) &&
-    !['inbox', 'no project'].includes(projectSearch.trim().toLowerCase())
+    projectSearch.trim().toLowerCase() !== 'no project'
   const heading = view.startsWith('project:')
     ? view.slice(8)
     : (
         {
-          inbox: 'Inbox',
           today: 'Today',
           upcoming: 'Upcoming',
+          due: 'Due Tasks',
           filters: 'Completed Tasks',
           reporting: 'Reporting',
           focus: 'Focus sessions',
           shared: 'Shared projects',
           reminders: 'Reminders',
-          calendar: 'Calendar',
           search: 'Search',
           help: 'Help & resources',
           notifications: 'Notifications',
@@ -425,8 +410,11 @@ function DashboardPage() {
     setCalendarMonth(next)
     setSelectedDate(firstDate < tomorrow ? tomorrow : firstDate)
   }
+  /** A reminder task can't be added for a time that has already passed, including the default one. */
+  const reminderInPast =
+    taskType === 'reminder' && !!reminder && isPastReminder(due, reminder.reminder)
   const add = () => {
-    if (!draft.trim()) return
+    if (!draft.trim() || reminderInPast) return
     createTaskMutation.mutate({
       title: draft.trim(),
       due,
@@ -517,7 +505,12 @@ function DashboardPage() {
   }
   const completeTask = (task: Task) => {
     if (task.reminder) return
-    if (isTaskDone(task)) {
+    if (!isTaskDone(task) && focusingTaskId === task.id) {
+      toast('Finish your focus session before completing this task.')
+      return
+    }
+    // Reopening always asks; only finishing a task can skip the dialog.
+    if (skipCompleteConfirm && !isTaskDone(task)) {
       if (isSaved(task)) completeTaskMutation.mutate(task)
       return
     }
@@ -528,57 +521,6 @@ function DashboardPage() {
     if (isSaved(completeTarget)) completeTaskMutation.mutate(completeTarget)
     setCompleteTarget(null)
   }
-  const quickAdd = () => {
-    const title = quickDraft.trim()
-    if (!title) return
-    createTaskMutation.mutate({ title, due: '', project: '', label: '', time: '', repeat: 'none' })
-    setQuickDraft('')
-  }
-  /** Gives a task a date or project, which moves it out of Inbox, and offers a way back. */
-  const sortTask = (task: Task, changes: { due: string } | { project: string }) => {
-    const index = visible.findIndex((item) => item.id === task.id)
-    const neighbour = visible[index + 1] ?? visible[index - 1]
-    const message =
-      'project' in changes
-        ? `Moved to ${changes.project}`
-        : changes.due === today()
-          ? 'Moved to Today'
-          : changes.due === moveDate(new Date(), 1)
-            ? 'Moved to Tomorrow'
-            : `Scheduled for ${dl(changes.due)}`
-    updateTaskMutation.mutate({ task, changes })
-    setSorting(null)
-    setSortedCount((count) => count + 1)
-    // Keep keyboard focus in the list instead of losing it with the row that just left.
-    requestAnimationFrame(() => {
-      const next = neighbour
-        ? document.querySelector<HTMLButtonElement>(`[data-task-id="${neighbour.id}"] button`)
-        : null
-      ;(next ?? quickAddInput.current)?.focus()
-    })
-    toast(
-      (shown) => (
-        <span className="flex items-center gap-4 text-sm">
-          <span>{message}</span>
-          <button
-            type="button"
-            className="cursor-pointer rounded-full border-0 bg-transparent px-2 py-1 text-sm font-semibold text-[#c2410c] hover:bg-orange-500/10 focus-visible:outline-2 focus-visible:outline-orange-500"
-            onClick={() => {
-              updateTaskMutation.mutate({
-                task: { ...task, ...changes },
-                changes: 'project' in changes ? { project: '' } : { due: '' },
-              })
-              setSortedCount((count) => Math.max(0, count - 1))
-              toast.dismiss(shown.id)
-            }}
-          >
-            Undo
-          </button>
-        </span>
-      ),
-      { id: `sorted-${task.id}`, duration: 6000 },
-    )
-  }
   if (isLoading || isImporting || (canLoad && (tasksQuery.isPending || projectsQuery.isPending)))
     return <LoadingPage />
   if (!isAuthenticated || !user) return null
@@ -586,6 +528,7 @@ function DashboardPage() {
   const renderTaskRow = (t: Task) => {
     const done = isTaskDone(t)
     const isReminder = Boolean(t.reminder)
+    const inFocus = !done && focusingTaskId === t.id
     return (
       <div
         className="group flex min-h-14 items-center gap-3 border-b border-[#d9dee7] dark:border-[#383838]"
@@ -611,12 +554,16 @@ function DashboardPage() {
           </div>
         ) : (
           <button
-            className={`grid size-5 shrink-0 cursor-pointer place-items-center rounded-full border ${
+            className={`grid size-5 shrink-0 place-items-center rounded-full border ${
+              inFocus ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'
+            } ${
               done
                 ? 'animate-check-pop border-green-600 bg-green-600 text-white motion-reduce:animate-none dark:border-green-500 dark:bg-green-500 dark:text-white'
                 : 'border-[#667085] bg-transparent text-white'
             }`}
             aria-label={done ? `Uncomplete ${t.title}` : `Complete ${t.title}`}
+            aria-disabled={inFocus || undefined}
+            title={inFocus ? 'Finish your focus session first' : undefined}
             onClick={() => completeTask(t)}
           >
             {done && (
@@ -631,16 +578,13 @@ function DashboardPage() {
         )}
         <div className="grid flex-1 gap-[5px]">
           <div className="flex items-center gap-2">
-            <button
-              type="button"
-              className={`text-left border-0 bg-transparent p-0 cursor-pointer text-sm hover:underline ${
+            <span
+              className={`text-left text-sm ${
                 done ? 'text-[#667085] dark:text-[#a7b0bf]' : 'text-[#1f2937] dark:text-[#f3f4f6]'
               }`}
-              title="Click to edit task"
-              onClick={() => setEditingTask(t)}
             >
               {t.title}
-            </button>
+            </span>
           </div>
           <small className="text-[11px] text-[#667085] dark:text-[#a7b0bf]">
             {[
@@ -657,85 +601,6 @@ function DashboardPage() {
               .join(' · ')}
           </small>
         </div>
-        {view === 'inbox' && isSaved(t) && !done && (
-          <div
-            ref={sorting?.taskId === t.id ? sortMenu : undefined}
-            className={`relative flex items-center gap-1 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100 max-[900px]:opacity-100 motion-reduce:transition-none ${
-              sorting?.taskId === t.id ? 'opacity-100' : 'opacity-0'
-            }`}
-          >
-            <button
-              type="button"
-              className={sortChipClass}
-              aria-label={`Move ${t.title} to Today`}
-              onClick={() => sortTask(t, { due: today() })}
-            >
-              Today
-            </button>
-            <button
-              type="button"
-              className={sortChipClass}
-              aria-label={`Move ${t.title} to Tomorrow`}
-              onClick={() => sortTask(t, { due: moveDate(new Date(), 1) })}
-            >
-              Tomorrow
-            </button>
-            <button
-              type="button"
-              className={`${dashboardIconButtonClass} text-[#667085] dark:text-[#a7b0bf]`}
-              aria-label={`Pick a date for ${t.title}`}
-              title="Pick a date"
-              aria-haspopup="dialog"
-              aria-expanded={sorting?.taskId === t.id && sorting.kind === 'date'}
-              data-sort-trigger={
-                sorting?.taskId === t.id && sorting.kind === 'date' ? '' : undefined
-              }
-              onClick={() =>
-                setSorting((current) =>
-                  current?.taskId === t.id && current.kind === 'date'
-                    ? null
-                    : { taskId: t.id, kind: 'date' },
-                )
-              }
-            >
-              <CalendarDays size={16} aria-hidden="true" />
-            </button>
-            <button
-              type="button"
-              className={`${dashboardIconButtonClass} text-[#667085] dark:text-[#a7b0bf]`}
-              aria-label={`Move ${t.title} to a project`}
-              title="Move to project"
-              aria-haspopup="dialog"
-              aria-expanded={sorting?.taskId === t.id && sorting.kind === 'project'}
-              data-sort-trigger={
-                sorting?.taskId === t.id && sorting.kind === 'project' ? '' : undefined
-              }
-              onClick={() =>
-                setSorting((current) =>
-                  current?.taskId === t.id && current.kind === 'project'
-                    ? null
-                    : { taskId: t.id, kind: 'project' },
-                )
-              }
-            >
-              <FolderInput size={16} aria-hidden="true" />
-            </button>
-            {sorting?.taskId === t.id && sorting.kind === 'date' && (
-              <TaskDatePicker
-                due=""
-                placement="right-0"
-                onSelect={(date) => sortTask(t, { due: date })}
-              />
-            )}
-            {sorting?.taskId === t.id && sorting.kind === 'project' && (
-              <SortProjectMenu
-                taskTitle={t.title}
-                projects={projects}
-                onSelect={(name) => sortTask(t, { project: name })}
-              />
-            )}
-          </div>
-        )}
         {isSaved(t) && !done && (
           <div className="flex items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100 max-[900px]:opacity-100 motion-reduce:transition-none">
             {assignees.length > 0 && (
@@ -873,11 +738,6 @@ function DashboardPage() {
             <h1 className="m-0 min-w-0 truncate font-display text-[30px] font-semibold tracking-[-0.03em] max-[900px]:text-[26px]">
               {heading}
             </h1>
-            {view === 'inbox' && visible.length > 0 && (
-              <span className="mr-auto ml-3 shrink-0 pt-1.5 text-sm tabular-nums text-[#667085] max-[900px]:ml-0 dark:text-[#a7b0bf]">
-                {visible.length} to sort
-              </span>
-            )}
             {currentProject && (
               <div className="ml-auto flex items-center gap-1">
                 <button
@@ -1002,7 +862,7 @@ function DashboardPage() {
                         setProjectPickerOpen((open) => !open)
                       }}
                     >
-                      <Inbox size={16} aria-hidden="true" className="shrink-0" />
+                      <Folder size={16} aria-hidden="true" className="shrink-0" />
                       <span className="truncate">{project || 'No project'}</span>
                     </button>
                     {projectPickerOpen && (
@@ -1041,7 +901,7 @@ function DashboardPage() {
                               className="flex min-h-10 w-full cursor-pointer items-center gap-3 rounded-lg border-0 bg-transparent px-3 text-left text-sm text-[#1f2937] hover:bg-[#f4f1e9] focus-visible:bg-[#f4f1e9] focus-visible:outline-2 focus-visible:outline-orange-500 aria-selected:bg-[#f4f1e9] dark:text-[#f2f2f2] dark:hover:bg-[#393939] dark:focus-visible:bg-[#393939] dark:focus-visible:outline-[#fed7aa] dark:aria-selected:bg-[#393939]"
                               onClick={() => chooseProject('')}
                             >
-                              <Inbox
+                              <Folder
                                 size={18}
                                 aria-hidden="true"
                                 className="text-[#667085] dark:text-[#d0d0d0]"
@@ -1059,7 +919,7 @@ function DashboardPage() {
                               className="flex min-h-10 w-full cursor-pointer items-center gap-3 rounded-lg border-0 bg-transparent px-3 text-left text-sm text-[#1f2937] hover:bg-[#f4f1e9] focus-visible:bg-[#f4f1e9] focus-visible:outline-2 focus-visible:outline-orange-500 aria-selected:bg-[#f4f1e9] dark:text-[#f2f2f2] dark:hover:bg-[#393939] dark:focus-visible:bg-[#393939] dark:focus-visible:outline-[#fed7aa] dark:aria-selected:bg-[#393939]"
                               onClick={() => chooseProject(name)}
                             >
-                              <Inbox
+                              <Folder
                                 size={18}
                                 aria-hidden="true"
                                 className="text-[#667085] dark:text-[#d0d0d0]"
@@ -1151,7 +1011,7 @@ function DashboardPage() {
                       type="submit"
                       className="grid size-10 cursor-pointer place-items-center rounded-xl border-0 btn-primary disabled:cursor-not-allowed disabled:opacity-50"
                       aria-label="Add task"
-                      disabled={!draft.trim()}
+                      disabled={!draft.trim() || reminderInPast}
                     >
                       <Send size={20} aria-hidden="true" />
                     </button>
@@ -1236,7 +1096,6 @@ function DashboardPage() {
               ))}
             </div>
           )}
-          {view === 'today' && <TodayCalendar />}
           {view === 'reporting' ? (
             <TaskReport />
           ) : view === 'focus' ? (
@@ -1261,21 +1120,8 @@ function DashboardPage() {
               onEdit={(task) => setEditingTask(task)}
               onDelete={(task) => setDeleteTarget({ type: 'task', task })}
             />
-          ) : view === 'calendar' ? (
-            <CalendarSettings />
           ) : view === 'help' ? (
-            <div className="mt-20 max-w-[520px]">
-              <h2 className="font-display text-[25px] font-semibold">
-                Make a little room for what matters
-              </h2>
-              <p className="text-[15px] leading-[1.6] text-[#667085] dark:text-[#a7b0bf]">
-                Add a task to Inbox, set a date to see it in Today or Upcoming, and group related
-                work in a project.
-              </p>
-              <button className={dashboardPrimaryClass} onClick={open}>
-                <Plus size={17} /> Add task
-              </button>
-            </div>
+            <HelpView />
           ) : (
             <>
               {view === 'upcoming' ? (
@@ -1298,6 +1144,29 @@ function DashboardPage() {
                   onDelete={(task) => setDeleteTarget({ type: 'task', task })}
                   onEdit={(task) => setEditingTask(task)}
                 />
+              ) : view === 'due' ? (
+                dueGroups.length ? (
+                  <div className="grid gap-8">
+                    {dueGroups.map(([date, group]) => (
+                      <section key={date} aria-labelledby={`due-${date}`}>
+                        <h2
+                          id={`due-${date}`}
+                          className="mb-2 flex items-baseline gap-2 text-xs font-semibold uppercase tracking-wider text-[#667085] dark:text-[#a7b0bf]"
+                        >
+                          {dl(date)}
+                          <span className="font-medium normal-case tracking-normal text-[#c2410c] dark:text-orange-300">
+                            {daysLate(date)}
+                          </span>
+                        </h2>
+                        <div className="border-t border-[#d9dee7] dark:border-[#383838]">
+                          {group.map(renderTaskRow)}
+                        </div>
+                      </section>
+                    ))}
+                  </div>
+                ) : (
+                  <Empty view={view} />
+                )
               ) : view === 'today' ? (
                 visible.length ? (
                   <div className="border-t border-[#d9dee7] dark:border-[#383838]">
@@ -1326,64 +1195,20 @@ function DashboardPage() {
                 ) : (
                   <Empty view={view} onAdd={open} />
                 )
-              ) : view === 'inbox' ? (
-                <>
-                  <form
-                    aria-label="Add to Inbox"
-                    className="flex min-h-14 items-center gap-3 border-y border-[#d9dee7] transition-shadow duration-150 focus-within:shadow-[inset_0_-2px_0_#c2410c] dark:border-[#383838] dark:focus-within:shadow-[inset_0_-2px_0_#fdba74] motion-reduce:transition-none"
-                    onSubmit={(event) => {
-                      event.preventDefault()
-                      quickAdd()
-                    }}
-                  >
-                    <Plus
-                      size={20}
-                      aria-hidden="true"
-                      className="shrink-0 text-[#c2410c] dark:text-[#fdba74]"
-                    />
-                    <input
-                      ref={quickAddInput}
-                      className="min-w-0 flex-1 border-0 bg-transparent py-3 text-[15px] text-[#1f2937] outline-none placeholder:text-[#667085] dark:text-[#f3f4f6] dark:placeholder:text-[#a7b0bf]"
-                      value={quickDraft}
-                      onChange={(event) => setQuickDraft(event.target.value)}
-                      onKeyDown={(event) => {
-                        if (event.key === 'Escape' && quickDraft) {
-                          event.preventDefault()
-                          setQuickDraft('')
-                        }
-                      }}
-                      placeholder="What’s on your mind?"
-                      aria-label="Add a task to Inbox"
-                      maxLength={255}
-                    />
-                    {quickDraft.trim() && (
-                      <button
-                        type="submit"
-                        className="inline-flex h-7 shrink-0 cursor-pointer items-center gap-1.5 rounded-full border-0 bg-transparent px-2.5 text-xs font-medium text-[#475467] hover:bg-[#f4f1e9] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange-500 dark:text-[#c9ced6] dark:hover:bg-[#383838] dark:focus-visible:outline-[#fed7aa]"
-                      >
-                        <CornerDownLeft size={14} aria-hidden="true" />
-                        Add
-                      </button>
-                    )}
-                  </form>
-                  {visible.length ? (
-                    <div>{visible.map(renderTaskRow)}</div>
-                  ) : (
-                    <Empty view={view} cleared={sortedCount > 0} />
-                  )}
-                </>
               ) : visible.length ? (
                 <div className="border-t border-[#d9dee7] dark:border-[#383838]">
                   {visible.map(renderTaskRow)}
-                  <button
-                    className="flex cursor-pointer items-center gap-2 border-0 bg-transparent py-[13px] text-sm font-medium uppercase tracking-[0.05em] text-orange-600 dark:text-orange-400"
-                    onClick={open}
-                  >
-                    <Plus size={18} /> Add task
-                  </button>
+                  {view !== 'filters' && (
+                    <button
+                      className="flex cursor-pointer items-center gap-2 border-0 bg-transparent py-[13px] text-sm font-medium uppercase tracking-[0.05em] text-orange-600 dark:text-orange-400"
+                      onClick={open}
+                    >
+                      <Plus size={18} /> Add task
+                    </button>
+                  )}
                 </div>
               ) : (
-                <Empty view={view} onAdd={open} />
+                <Empty view={view} onAdd={view === 'filters' ? undefined : open} />
               )}
             </>
           )}
@@ -1420,26 +1245,21 @@ function DashboardPage() {
         description={
           deleteTarget?.type === 'task' ? (
             <>
-              Are you sure you want to delete{' '}
-              <strong className="font-semibold text-[#1f2937] dark:text-[#f3f4f6]">
-                “{deleteTarget.task.title}”
+              <strong className="line-clamp-2 break-words font-semibold text-[#1f2937] dark:text-[#f3f4f6]">
+                {deleteTarget.task.title}
               </strong>
-              ? This action cannot be undone.
             </>
           ) : deleteTarget?.type === 'project' ? (
             <>
-              Are you sure you want to delete the project{' '}
-              <strong className="font-semibold text-[#1f2937] dark:text-[#f3f4f6]">
-                “{deleteTarget.projectName}”
+              <strong className="line-clamp-2 break-words font-semibold text-[#1f2937] dark:text-[#f3f4f6]">
+                {deleteTarget.projectName}
               </strong>
-              ?
               {deleteTarget.taskCount > 0 ? (
-                <span className="mt-1.5 block text-red-600 dark:text-red-400">
-                  This will also permanently delete {deleteTarget.taskCount} task
-                  {deleteTarget.taskCount > 1 ? 's' : ''} in this project.
+                <span className="mt-3 block rounded-xl bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-950/40 dark:text-red-300">
+                  Its {deleteTarget.taskCount} task
+                  {deleteTarget.taskCount > 1 ? 's go' : ' goes'} with it.
                 </span>
               ) : null}
-              <span className="mt-1 block">This action cannot be undone.</span>
             </>
           ) : null
         }
@@ -1450,6 +1270,7 @@ function DashboardPage() {
       <ConfirmCompleteDialog
         isOpen={Boolean(completeTarget)}
         task={completeTarget}
+        mode={completeTarget && isTaskDone(completeTarget) ? 'uncomplete' : 'complete'}
         onClose={() => setCompleteTarget(null)}
         onConfirm={confirmComplete}
       />
@@ -1470,7 +1291,7 @@ function DashboardPage() {
     </div>
   )
 }
-/** Without `onTimeChange` and `onRepeatChange` it is a plain date picker (used to sort Inbox). */
+/** Without `onTimeChange` and `onRepeatChange` it is a plain date picker. */
 function TaskDatePicker({
   due,
   time = '',
@@ -1729,43 +1550,23 @@ function TaskDateMonth({
     </div>
   )
 }
-/** Inbox has its own quick-add row, so its empty state has no button (`onAdd` is omitted). */
-function Empty({
-  view,
-  onAdd,
-  cleared = false,
-}: {
-  view: DashboardView
-  onAdd?: () => void
-  cleared?: boolean
-}) {
+function Empty({ view, onAdd }: { view: DashboardView; onAdd?: () => void }) {
   const c =
-    view === 'inbox' && cleared
-      ? ['Everything has a place', 'Your inbox is clear. New thoughts will land here.']
-      : view === 'inbox'
-        ? [
-            'Capture now, plan later',
-            'Inbox is your go-to spot for quick task entry. Clear your mind now, organize when you’re ready.',
-          ]
-        : view === 'today'
-          ? ['A clear day ahead', 'Tasks scheduled for today will appear here.']
-          : view === 'upcoming'
-            ? ['Nothing on the horizon', 'Give a task a date to see it here.']
-            : view === 'notifications'
-              ? ['All caught up', 'You have no notifications right now.']
+    view === 'today'
+      ? ['A clear day ahead', 'Tasks scheduled for today will appear here.']
+      : view === 'upcoming'
+        ? ['Nothing on the horizon', 'Give a task a date to see it here.']
+        : view === 'due'
+          ? ['Nothing left behind', 'Tasks you didn’t finish by their due date wait here.']
+          : view === 'notifications'
+            ? ['All caught up', 'You have no notifications right now.']
+            : view === 'filters'
+              ? ['Nothing completed yet', 'Tasks you complete will appear here.']
               : ['Keep things easy to find', 'Add a task to this view to get started.']
   return (
-    <div
-      className={`mx-auto max-w-[360px] text-center ${view === 'inbox' ? 'mt-[10vh]' : 'mt-[18vh] max-[900px]:mt-[12vh]'}`}
-    >
+    <div className={`mx-auto max-w-[360px] text-center mt-[18vh] max-[900px]:mt-[12vh]`}>
       <div className="relative mb-[14px] grid h-[150px] place-items-center text-[#fed7aa] max-[900px]:h-[132px]">
-        {view === 'inbox' ? (
-          <img
-            className="h-[150px] w-[150px] object-contain max-[900px]:h-[132px] max-[900px]:w-[132px]"
-            src="/inbox-empty.png"
-            alt=""
-          />
-        ) : view === 'today' ? (
+        {view === 'today' ? (
           <img
             className="h-[150px] w-[150px] object-contain max-[900px]:h-[132px] max-[900px]:w-[132px]"
             src="/today-empty.png"
@@ -1774,7 +1575,7 @@ function Empty({
         ) : (
           <img
             className="h-[150px] w-[150px] object-contain max-[900px]:h-[132px] max-[900px]:w-[132px]"
-            src="/inbox-empty.png"
+            src="/empty.png"
             alt=""
           />
         )}
@@ -1788,73 +1589,6 @@ function Empty({
           <Plus size={20} /> Add task
         </button>
       )}
-    </div>
-  )
-}
-function SortProjectMenu({
-  taskTitle,
-  projects,
-  onSelect,
-}: {
-  taskTitle: string
-  projects: string[]
-  onSelect: (name: string) => void
-}) {
-  const [search, setSearch] = useState('')
-  const query = search.trim()
-  const matches = projects.filter((name) => name.toLowerCase().includes(query.toLowerCase()))
-  const canCreate =
-    !!query &&
-    !projects.some((name) => name.toLowerCase() === query.toLowerCase()) &&
-    !['inbox', 'no project'].includes(query.toLowerCase())
-  const optionClass =
-    'flex min-h-10 w-full cursor-pointer items-center gap-3 rounded-lg border-0 bg-transparent px-3 text-left text-sm text-[#1f2937] hover:bg-[#f4f1e9] focus-visible:bg-[#f4f1e9] focus-visible:outline-2 focus-visible:outline-orange-500 dark:text-[#f2f2f2] dark:hover:bg-[#393939] dark:focus-visible:bg-[#393939] dark:focus-visible:outline-[#fed7aa]'
-  return (
-    <div
-      role="dialog"
-      aria-label={`Move ${taskTitle} to a project`}
-      className="absolute right-0 top-[calc(100%+7px)] z-30 w-[min(280px,calc(100vw-40px))] rounded-xl border border-[#d9dee7] bg-white p-[10px] text-[#1f2937] shadow-[0_16px_36px_#0002] dark:border-[#454545] dark:bg-[#292929] dark:text-[#f2f2f2] dark:shadow-[0_16px_36px_#0007]"
-    >
-      <input
-        autoFocus
-        className="box-border h-10 w-full rounded-lg border border-[#d9dee7] bg-transparent px-3 text-[15px] text-[#1f2937] outline-none placeholder:text-[#667085] focus:border-orange-500 dark:border-[#5d5d5d] dark:text-[#f2f2f2] dark:placeholder:text-[#aaa] dark:focus:border-[#a5a5a5]"
-        value={search}
-        onChange={(event) => setSearch(event.target.value)}
-        onKeyDown={(event) => {
-          if (event.key !== 'Enter') return
-          event.preventDefault()
-          if (matches.length && query) onSelect(matches[0])
-          else if (canCreate) onSelect(query)
-        }}
-        placeholder={projects.length ? 'Find or create a project' : 'Name a new project'}
-        aria-label="Find or create a project"
-        maxLength={255}
-      />
-      <div className="mt-[10px] max-h-56 overflow-y-auto">
-        {matches.map((name) => (
-          <button key={name} type="button" className={optionClass} onClick={() => onSelect(name)}>
-            <FolderInput
-              size={18}
-              aria-hidden="true"
-              className="shrink-0 text-[#667085] dark:text-[#d0d0d0]"
-            />
-            <span className="min-w-0 flex-1 truncate">{name}</span>
-          </button>
-        ))}
-        {canCreate && (
-          <button type="button" className={optionClass} onClick={() => onSelect(query)}>
-            <Plus size={18} aria-hidden="true" className="shrink-0" />
-            <span className="min-w-0 flex-1 truncate">Create “{query}”</span>
-          </button>
-        )}
-        {!matches.length && !canCreate && (
-          <p className="m-0 px-3 py-2 text-sm text-[#667085] dark:text-[#a7b0bf]">
-            {projects.length
-              ? 'No matching projects.'
-              : 'No projects yet. Type a name to start one.'}
-          </p>
-        )}
-      </div>
     </div>
   )
 }
@@ -2111,14 +1845,9 @@ function UpcomingTask({
         </button>
       )}
       <div className="min-w-0 flex-1">
-        <button
-          type="button"
-          className="m-0 break-words text-left text-sm font-medium leading-5 text-[#27352f] dark:text-[#f3f4f6] border-0 bg-transparent p-0 cursor-pointer hover:underline"
-          title="Click to edit task"
-          onClick={() => onEdit(task)}
-        >
+        <p className="m-0 break-words text-left text-sm font-medium leading-5 text-[#27352f] dark:text-[#f3f4f6]">
           {task.title}
-        </button>
+        </p>
         {details.length > 0 && (
           <p className="mb-0 mt-1 text-xs leading-5 text-[#59645e] dark:text-[#b6c0b8]">
             {details.join(' · ')}

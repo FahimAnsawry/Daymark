@@ -29,15 +29,8 @@ export function SiteFooter() {
       <div className="footer-grid grid grid-cols-2 md:grid-cols-4 mt-16 gap-x-6 md:gap-x-12 gap-y-12">
         <nav className="footer-column" aria-label="Explore">
           <h3>Explore</h3>
-          <Link to="/" hash="how-it-works">
-            How it works
-          </Link>
-          <Link to="/" hash="principles">
-            Our approach
-          </Link>
-          <Link to="/" hash="stories">
-            Member stories
-          </Link>
+          <Link to="/">How it works</Link>
+          <Link to="/about">Our approach</Link>
           <Link to="/pricing">Pricing</Link>
         </nav>
 

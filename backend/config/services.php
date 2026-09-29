@@ -39,8 +39,6 @@ return [
         'client_id' => env('GOOGLE_CLIENT_ID'),
         'client_secret' => env('GOOGLE_CLIENT_SECRET'),
         'redirect' => env('GOOGLE_REDIRECT_URI', 'http://localhost:8000/api/auth/google/callback'),
-        // Calendar sync (Pro) has its own consent flow; add this URI to the Google OAuth client too.
-        'calendar_redirect' => env('GOOGLE_CALENDAR_REDIRECT_URI', 'http://localhost:8000/api/calendar/google/callback'),
         'guzzle' => [
             'verify' => env('CURL_CA_BUNDLE', file_exists(storage_path('cacert.pem')) ? storage_path('cacert.pem') : true),
         ],

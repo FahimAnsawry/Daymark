@@ -1,6 +1,6 @@
 import { Timer } from 'lucide-react'
 import { usePlan } from '../lib/auth-context'
-import { formatDuration } from '../lib/calendar'
+import { formatDuration } from '../lib/duration'
 import { FOCUS_PRESETS, formatFocusDuration, useCurrentFocus } from '../lib/focus'
 import { localDate, useTaskReport, type Task } from '../lib/tasks'
 import { PlusGate } from './PlusGate'

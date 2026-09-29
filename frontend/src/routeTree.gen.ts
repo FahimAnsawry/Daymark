@@ -12,16 +12,17 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AboutRouteImport } from './routes/about'
 import { Route as DashboardRouteImport } from './routes/dashboard'
+import { Route as ForgotPasswordRouteImport } from './routes/forgot-password'
 import { Route as LoadingRouteImport } from './routes/loading'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as PricingRouteImport } from './routes/pricing'
 import { Route as ProfileRouteImport } from './routes/profile'
 import { Route as RegisterRouteImport } from './routes/register'
+import { Route as ResetPasswordRouteImport } from './routes/reset-password'
 import { Route as CheckoutSuccessRouteImport } from './routes/checkout.success'
 import { Route as InviteTokenRouteImport } from './routes/invite.$token'
 import { Route as SettingsIndexRouteImport } from './routes/settings.index'
 import { Route as SettingsBillingRouteImport } from './routes/settings.billing'
-import { Route as SettingsCalendarRouteImport } from './routes/settings.calendar'
 import { Route as SettingsRemindersRouteImport } from './routes/settings.reminders'
 
 const IndexRoute = IndexRouteImport.update({
@@ -37,6 +38,11 @@ const AboutRoute = AboutRouteImport.update({
 const DashboardRoute = DashboardRouteImport.update({
   id: '/dashboard',
   path: '/dashboard',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ForgotPasswordRoute = ForgotPasswordRouteImport.update({
+  id: '/forgot-password',
+  path: '/forgot-password',
   getParentRoute: () => rootRouteImport,
 } as any)
 const LoadingRoute = LoadingRouteImport.update({
@@ -64,6 +70,11 @@ const RegisterRoute = RegisterRouteImport.update({
   path: '/register',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ResetPasswordRoute = ResetPasswordRouteImport.update({
+  id: '/reset-password',
+  path: '/reset-password',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const CheckoutSuccessRoute = CheckoutSuccessRouteImport.update({
   id: '/checkout/success',
   path: '/checkout/success',
@@ -84,11 +95,6 @@ const SettingsBillingRoute = SettingsBillingRouteImport.update({
   path: '/settings/billing',
   getParentRoute: () => rootRouteImport,
 } as any)
-const SettingsCalendarRoute = SettingsCalendarRouteImport.update({
-  id: '/settings/calendar',
-  path: '/settings/calendar',
-  getParentRoute: () => rootRouteImport,
-} as any)
 const SettingsRemindersRoute = SettingsRemindersRouteImport.update({
   id: '/settings/reminders',
   path: '/settings/reminders',
@@ -99,15 +105,16 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/about': typeof AboutRoute
   '/dashboard': typeof DashboardRoute
+  '/forgot-password': typeof ForgotPasswordRoute
   '/loading': typeof LoadingRoute
   '/login': typeof LoginRoute
   '/pricing': typeof PricingRoute
   '/profile': typeof ProfileRoute
   '/register': typeof RegisterRoute
+  '/reset-password': typeof ResetPasswordRoute
   '/checkout/success': typeof CheckoutSuccessRoute
   '/invite/$token': typeof InviteTokenRoute
   '/settings/billing': typeof SettingsBillingRoute
-  '/settings/calendar': typeof SettingsCalendarRoute
   '/settings/reminders': typeof SettingsRemindersRoute
   '/settings/': typeof SettingsIndexRoute
 }
@@ -115,15 +122,16 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/about': typeof AboutRoute
   '/dashboard': typeof DashboardRoute
+  '/forgot-password': typeof ForgotPasswordRoute
   '/loading': typeof LoadingRoute
   '/login': typeof LoginRoute
   '/pricing': typeof PricingRoute
   '/profile': typeof ProfileRoute
   '/register': typeof RegisterRoute
+  '/reset-password': typeof ResetPasswordRoute
   '/checkout/success': typeof CheckoutSuccessRoute
   '/invite/$token': typeof InviteTokenRoute
   '/settings/billing': typeof SettingsBillingRoute
-  '/settings/calendar': typeof SettingsCalendarRoute
   '/settings/reminders': typeof SettingsRemindersRoute
   '/settings': typeof SettingsIndexRoute
 }
@@ -132,15 +140,16 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/about': typeof AboutRoute
   '/dashboard': typeof DashboardRoute
+  '/forgot-password': typeof ForgotPasswordRoute
   '/loading': typeof LoadingRoute
   '/login': typeof LoginRoute
   '/pricing': typeof PricingRoute
   '/profile': typeof ProfileRoute
   '/register': typeof RegisterRoute
+  '/reset-password': typeof ResetPasswordRoute
   '/checkout/success': typeof CheckoutSuccessRoute
   '/invite/$token': typeof InviteTokenRoute
   '/settings/billing': typeof SettingsBillingRoute
-  '/settings/calendar': typeof SettingsCalendarRoute
   '/settings/reminders': typeof SettingsRemindersRoute
   '/settings/': typeof SettingsIndexRoute
 }
@@ -150,15 +159,16 @@ export interface FileRouteTypes {
     | '/'
     | '/about'
     | '/dashboard'
+    | '/forgot-password'
     | '/loading'
     | '/login'
     | '/pricing'
     | '/profile'
     | '/register'
+    | '/reset-password'
     | '/checkout/success'
     | '/invite/$token'
     | '/settings/billing'
-    | '/settings/calendar'
     | '/settings/reminders'
     | '/settings/'
   fileRoutesByTo: FileRoutesByTo
@@ -166,15 +176,16 @@ export interface FileRouteTypes {
     | '/'
     | '/about'
     | '/dashboard'
+    | '/forgot-password'
     | '/loading'
     | '/login'
     | '/pricing'
     | '/profile'
     | '/register'
+    | '/reset-password'
     | '/checkout/success'
     | '/invite/$token'
     | '/settings/billing'
-    | '/settings/calendar'
     | '/settings/reminders'
     | '/settings'
   id:
@@ -182,15 +193,16 @@ export interface FileRouteTypes {
     | '/'
     | '/about'
     | '/dashboard'
+    | '/forgot-password'
     | '/loading'
     | '/login'
     | '/pricing'
     | '/profile'
     | '/register'
+    | '/reset-password'
     | '/checkout/success'
     | '/invite/$token'
     | '/settings/billing'
-    | '/settings/calendar'
     | '/settings/reminders'
     | '/settings/'
   fileRoutesById: FileRoutesById
@@ -199,15 +211,16 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AboutRoute: typeof AboutRoute
   DashboardRoute: typeof DashboardRoute
+  ForgotPasswordRoute: typeof ForgotPasswordRoute
   LoadingRoute: typeof LoadingRoute
   LoginRoute: typeof LoginRoute
   PricingRoute: typeof PricingRoute
   ProfileRoute: typeof ProfileRoute
   RegisterRoute: typeof RegisterRoute
+  ResetPasswordRoute: typeof ResetPasswordRoute
   CheckoutSuccessRoute: typeof CheckoutSuccessRoute
   InviteTokenRoute: typeof InviteTokenRoute
   SettingsBillingRoute: typeof SettingsBillingRoute
-  SettingsCalendarRoute: typeof SettingsCalendarRoute
   SettingsRemindersRoute: typeof SettingsRemindersRoute
   SettingsIndexRoute: typeof SettingsIndexRoute
 }
@@ -233,6 +246,13 @@ declare module '@tanstack/react-router' {
       path: '/dashboard'
       fullPath: '/dashboard'
       preLoaderRoute: typeof DashboardRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/forgot-password': {
+      id: '/forgot-password'
+      path: '/forgot-password'
+      fullPath: '/forgot-password'
+      preLoaderRoute: typeof ForgotPasswordRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/loading': {
@@ -270,6 +290,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof RegisterRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/reset-password': {
+      id: '/reset-password'
+      path: '/reset-password'
+      fullPath: '/reset-password'
+      preLoaderRoute: typeof ResetPasswordRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/checkout/success': {
       id: '/checkout/success'
       path: '/checkout/success'
@@ -298,13 +325,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SettingsBillingRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/settings/calendar': {
-      id: '/settings/calendar'
-      path: '/settings/calendar'
-      fullPath: '/settings/calendar'
-      preLoaderRoute: typeof SettingsCalendarRouteImport
-      parentRoute: typeof rootRouteImport
-    }
     '/settings/reminders': {
       id: '/settings/reminders'
       path: '/settings/reminders'
@@ -319,15 +339,16 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AboutRoute: AboutRoute,
   DashboardRoute: DashboardRoute,
+  ForgotPasswordRoute: ForgotPasswordRoute,
   LoadingRoute: LoadingRoute,
   LoginRoute: LoginRoute,
   PricingRoute: PricingRoute,
   ProfileRoute: ProfileRoute,
   RegisterRoute: RegisterRoute,
+  ResetPasswordRoute: ResetPasswordRoute,
   CheckoutSuccessRoute: CheckoutSuccessRoute,
   InviteTokenRoute: InviteTokenRoute,
   SettingsBillingRoute: SettingsBillingRoute,
-  SettingsCalendarRoute: SettingsCalendarRoute,
   SettingsRemindersRoute: SettingsRemindersRoute,
   SettingsIndexRoute: SettingsIndexRoute,
 }

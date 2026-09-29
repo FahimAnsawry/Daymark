@@ -26,7 +26,7 @@ export const TRIAL_DAYS = 7
 export const FREE_PLAN = {
   name: 'Free',
   description: 'The essentials for planning your day.',
-  features: ['Inbox and Today views', 'Tasks and projects'],
+  features: ['Today view', 'Tasks and projects'],
 }
 
 export const PLANS: UpgradePlan[] = [
@@ -51,7 +51,6 @@ export const PLANS: UpgradePlan[] = [
     features: [
       { label: 'Everything in Plus' },
       { label: 'Shared projects' },
-      { label: 'Google Calendar beside your day' },
       { label: 'Reporting and weekly reflection' },
       { label: 'Filters and labels' },
       { label: 'Priority help when you need it' },

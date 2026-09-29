@@ -9,11 +9,10 @@ import { useAuth } from '../lib/auth-context'
 
 interface NavbarProps {
   className?: string
-  brandHref?: string
   variant?: 'landing' | 'light'
 }
 
-export function Navbar({ className = '', brandHref, variant }: NavbarProps) {
+export function Navbar({ className = '', variant }: NavbarProps) {
   const [menuOpen, setMenuOpen] = useState(false)
   const { user, isAuthenticated, logout } = useAuth()
   const isLight =
@@ -56,7 +55,7 @@ export function Navbar({ className = '', brandHref, variant }: NavbarProps) {
     <header className={`${navContainerClasses} ${className}`.trim()}>
       <Link
         className="group inline-flex items-center gap-[9px] font-logo text-[0.95rem] font-bold tracking-[0.08em] uppercase z-10 focus-visible:outline-2 focus-visible:outline-[#fed7aa] focus-visible:outline-offset-4"
-        to={brandHref || (isAuthenticated ? '/dashboard' : '/')}
+        to={isAuthenticated ? '/dashboard' : '/'}
         aria-label="Daymark home"
         onClick={() => setMenuOpen(false)}
       >

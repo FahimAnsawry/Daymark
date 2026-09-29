@@ -14,14 +14,7 @@ type Props = {
   onUpgrade?: () => void
 }
 
-export function EditTaskDialog({
-  task,
-  isOpen,
-  onClose,
-  onSave,
-  onDelete,
-  projects,
-}: Props) {
+export function EditTaskDialog({ task, isOpen, onClose, onSave, onDelete, projects }: Props) {
   const [title, setTitle] = useState('')
   const [due, setDue] = useState('')
   const [time, setTime] = useState('')
@@ -78,7 +71,8 @@ export function EditTaskDialog({
   if (!isOpen || !task) return null
 
   const isExistingReminderTask = Boolean(task.reminder)
-  const reminderMoved = isExistingReminderTask && (time !== task.reminder || due !== (task.due || ''))
+  const reminderMoved =
+    isExistingReminderTask && (time !== task.reminder || due !== (task.due || ''))
   const reminderInPast = reminderMoved && isPastReminder(due, time)
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -86,13 +80,13 @@ export function EditTaskDialog({
     if (!title.trim() || reminderInPast) return
 
     const reminderValue = isExistingReminderTask
-      ? (time || reminder?.reminder || task.reminder)
+      ? time || reminder?.reminder || task.reminder
       : (reminder?.reminder ?? null)
 
     onSave({
       title: title.trim(),
       due: due || '',
-      time: isExistingReminderTask ? (reminderValue || '') : (time || ''),
+      time: isExistingReminderTask ? reminderValue || '' : time || '',
       project: project || '',
       label: label.trim(),
       repeat,
@@ -183,11 +177,6 @@ export function EditTaskDialog({
                     }))
                   }}
                 />
-                {reminderInPast && (
-                  <p role="alert" className="m-0 mt-1.5 text-xs text-red-600 dark:text-red-400">
-                    That time has already passed. Pick a later time.
-                  </p>
-                )}
                 <label className="mt-1.5 flex cursor-pointer items-center gap-1.5 text-xs text-[#667085] dark:text-[#a7b0bf]">
                   <input
                     type="checkbox"

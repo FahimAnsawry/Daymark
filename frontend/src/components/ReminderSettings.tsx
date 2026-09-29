@@ -145,14 +145,9 @@ function UpcomingReminders({
                       {clockTime(at)}
                     </time>
                     <span className="min-w-0 flex-1">
-                      <button
-                        type="button"
-                        className="m-0 block truncate border-0 bg-transparent p-0 text-left text-sm font-medium text-inherit hover:underline cursor-pointer"
-                        title="Click to edit task"
-                        onClick={() => onEdit?.(task)}
-                      >
+                      <span className="m-0 block truncate text-left text-sm font-medium">
                         {task.title}
-                      </button>
+                      </span>
                       {(task.project || task.reminder_frequency || task.reminder_early) && (
                         <span className={`block truncate text-[12px] ${mutedText}`}>
                           {[

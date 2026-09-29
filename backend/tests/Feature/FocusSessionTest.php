@@ -114,4 +114,28 @@ class FocusSessionTest extends TestCase
         $this->getJson('/api/reports/tasks?group=day&from=2026-09-19&to=2026-09-25&today=2026-09-25')
             ->assertJsonPath('focus_minutes', null);
     }
+
+    public function test_cannot_complete_a_task_while_focusing_on_it(): void
+    {
+        $user = User::factory()->subscribed(Plan::Plus)->create();
+        $task = Task::factory()->for($user)->create();
+        FocusSession::factory()->for($user)->for($task)->create(['ended_at' => null]);
+        Sanctum::actingAs($user);
+
+        $this->postJson("/api/tasks/{$task->id}/complete", ['completed_on' => '2026-09-28'])
+            ->assertUnprocessable()
+            ->assertJsonPath('errors.task.0', 'Finish your focus session before completing this task.');
+        $this->assertFalse($task->fresh()->done);
+    }
+
+    public function test_can_complete_a_task_once_its_focus_session_has_ended(): void
+    {
+        $user = User::factory()->subscribed(Plan::Plus)->create();
+        $task = Task::factory()->for($user)->create();
+        FocusSession::factory()->for($user)->for($task)->create(['ended_at' => now()]);
+        Sanctum::actingAs($user);
+
+        $this->postJson("/api/tasks/{$task->id}/complete", ['completed_on' => '2026-09-28'])->assertOk();
+        $this->assertTrue($task->fresh()->done);
+    }
 }

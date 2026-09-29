@@ -105,6 +105,19 @@ class TaskController extends Controller
         }
 
         $completedOn = $request->validated('completed_on');
+
+        $isFinishing = $task->rollsForward()
+            ? ! $task->completions()->where('completed_on', $completedOn)->exists()
+            : ! $task->done;
+
+        // Reopening is always fine; finishing waits until the focus session on this task ends.
+        if ($isFinishing && $request->user()->focusSessions()->whereNull('ended_at')->where('task_id', $task->id)->exists()) {
+            return response()->json([
+                'message' => 'Finish your focus session before completing this task.',
+                'errors' => ['task' => ['Finish your focus session before completing this task.']],
+            ], 422);
+        }
+
         // Completions count for whoever did the task, which in a shared project may not be its creator.
         $completedBy = $request->user()->id;
 

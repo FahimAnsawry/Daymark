@@ -1,9 +1,10 @@
-import { useState } from 'react'
+import { useState, type CSSProperties } from 'react'
 import { createFileRoute, Link } from '@tanstack/react-router'
 import { ArrowRight, Check } from 'lucide-react'
 import { Navbar } from '../components/Navbar'
 import { SiteFooter } from '../components/SiteFooter'
 import { GuestOnly } from '../components/GuestOnly'
+import { revealDelay, useReveal } from '../lib/reveal'
 import {
   FREE_PLAN,
   PLANS as PAID_PLANS,
@@ -33,7 +34,7 @@ const PLANS: PricingPlan[] = [
 ]
 
 const COMPARISON_ROWS = [
-  { label: 'Inbox and Today views', values: ['Included', 'Included', 'Included'] },
+  { label: 'Today view', values: ['Included', 'Included', 'Included'] },
   { label: 'Tasks and projects', values: ['Included', 'Included', 'Included'] },
   { label: 'Gentle reminders and quiet hours', values: ['—', 'Included', 'Included'] },
   { label: 'Focus sessions', values: ['—', 'Included', 'Included'] },
@@ -41,7 +42,6 @@ const COMPARISON_ROWS = [
   { label: 'Flexible daily views', values: ['—', 'Included', 'Included'] },
   { label: 'Upcoming planning', values: ['—', 'Included', 'Included'] },
   { label: 'Shared projects', values: ['—', '—', 'Included'] },
-  { label: 'Google Calendar beside your day', values: ['—', '—', 'Included'] },
   { label: 'Reporting and weekly reflection', values: ['—', '—', 'Included'] },
   { label: 'Filters and labels', values: ['—', '—', 'Included'] },
   { label: 'Priority help', values: ['—', '—', 'Included'] },
@@ -54,29 +54,39 @@ export const Route = createFileRoute('/pricing')({
 
 function PricingPage() {
   const [billingPeriod, setBillingPeriod] = useState<BillingPeriod>('yearly')
+  const revealRef = useReveal<HTMLElement>()
 
   return (
     <GuestOnly>
       <div className="min-h-screen text-[#1f2937] dark:text-[#f3f4f6] bg-app-background transition-colors duration-250">
         <Navbar variant="light" />
 
-        <main>
+        <main ref={revealRef}>
           <section
             className="max-w-[1200px] mx-auto py-8 md:py-12 pb-[90px] md:pb-[120px] px-5.5 md:px-[5vw]"
             aria-labelledby="plans-title"
           >
-            <div className="flex flex-col items-center text-center max-w-[820px] mx-auto mb-9 md:mb-[52px]">
+            <div
+              className="flex flex-col items-center text-center max-w-[820px] mx-auto mb-9 md:mb-[52px]"
+              data-reveal="pending"
+            >
               <h1
                 id="plans-title"
-                className="m-0 mb-4 text-[#1f2937] dark:text-[#f2f4ee] font-display text-[clamp(2.7rem,5vw,4.6rem)] font-semibold tracking-[-0.04em] leading-[1.02] text-center"
+                className="reveal-rise m-0 mb-4 text-[#1f2937] dark:text-[#f2f4ee] font-display text-[clamp(2.7rem,5vw,4.6rem)] font-semibold tracking-[-0.04em] leading-[1.02] text-center"
               >
                 Choose your plan
               </h1>
-              <p className="m-0 mb-7 max-w-[520px] text-[#667085] dark:text-[#a7b0bf] text-[0.95rem] leading-[1.55] text-balance">
+              <p
+                className="reveal-rise m-0 mb-7 max-w-[520px] text-[#667085] dark:text-[#a7b0bf] text-[0.95rem] leading-[1.55] text-balance"
+                style={revealDelay(140)}
+              >
                 Start free. When you want more room, try Plus or Pro free for {TRIAL_DAYS} days.
               </p>
 
-              <div className=" flex flex-col items-center gap-2.5 w-full max-w-[280px] md:max-w-none mx-auto">
+              <div
+                className="reveal-rise flex flex-col items-center gap-2.5 w-full max-w-[280px] md:max-w-none mx-auto"
+                style={revealDelay(260)}
+              >
                 <fieldset
                   className="relative inline-flex w-full md:w-[228px] p-1 border border-[#c7cfc2] dark:border-[#383838] rounded-full bg-white/50 dark:bg-[#111a17] box-border"
                   aria-label="Billing period"
@@ -132,9 +142,11 @@ function PricingPage() {
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-[17px] items-stretch">
-              {PLANS.map((plan) => (
+              {PLANS.map((plan, planIndex) => (
                 <article
-                  className={`relative flex flex-col min-h-0 md:min-h-[500px] p-[28px_23px_24px] md:p-[32px_28px_28px] border transition-colors ${
+                  data-reveal="pending"
+                  style={{ '--card-index': planIndex } as CSSProperties}
+                  className={`reveal-card ${plan.recommended ? 'reveal-lift' : 'reveal-rise'} relative flex flex-col min-h-0 md:min-h-[500px] p-[28px_23px_24px] md:p-[32px_28px_28px] border transition-colors ${
                     plan.recommended
                       ? 'border-[#ea580c] dark:border-[#9a3412] bg-[#fed7aa] text-[#1f2937] dark:bg-[#fed7aa] dark:text-[#1f2937] shadow-[0_18px_40px_rgba(31,41,55,0.16)] dark:shadow-[0_18px_40px_rgba(0,0,0,0.35)]'
                       : 'border-[#c7cfc2] dark:border-[#383838] bg-white/28 dark:bg-[#111a17]'
@@ -202,10 +214,11 @@ function PricingPage() {
                   <ul
                     className={`grid gap-3 mt-[30px] md:mt-auto pt-7 border-t list-none p-0 ${plan.recommended ? 'border-[#c2410c]/20 dark:border-[#c2410c]/25' : 'border-[#c7cfc2] dark:border-[#383838]'}`}
                   >
-                    {plan.features.map((feature) => (
+                    {plan.features.map((feature, featureIndex) => (
                       <li
                         key={feature}
-                        className={`flex items-center gap-2 text-[0.75rem] ${
+                        style={revealDelay(320 + featureIndex * 70)}
+                        className={`reveal-fade flex items-center gap-2 text-[0.75rem] ${
                           plan.recommended
                             ? 'text-[#1f2937]/85 dark:text-[#1f2937]/85 [&>svg]:shrink-0 [&>svg]:text-[#c2410c] dark:[&>svg]:text-[#9a3412]'
                             : 'text-[#667085] dark:text-[#a7b0bf] [&>svg]:shrink-0 [&>svg]:text-[#ea580c] dark:[&>svg]:text-[#fb923c]'
@@ -224,13 +237,14 @@ function PricingPage() {
             className="max-w-[1200px] mx-auto pt-0 pb-[90px] md:pb-[120px] px-5.5 md:px-[5vw]"
             aria-labelledby="comparison-title"
           >
-            <div className="mb-7.5 md:mb-10.5">
-              <p className="mb-5 text-[#ea580c] dark:text-[#fb923c] text-[0.72rem] font-bold tracking-[0.08em] uppercase">
+            <div className="mb-7.5 md:mb-10.5" data-reveal="pending">
+              <p className="reveal-fade mb-5 text-[#ea580c] dark:text-[#fb923c] text-[0.72rem] font-bold tracking-[0.08em] uppercase">
                 At a glance
               </p>
               <h2
                 id="comparison-title"
-                className="m-0 mb-4 text-[#1f2937] dark:text-[#f2f4ee] font-display text-[clamp(1.5rem,7vw,2.3rem)] sm:text-[clamp(2.7rem,5vw,4.6rem)] font-semibold tracking-[-0.04em] leading-[1.02] text-balance [&>em]:font-semibold [&>em]:text-[#64748b] dark:[&>em]:text-[#94a3b8] [&>em]:not-italic"
+                style={revealDelay(120)}
+                className="reveal-rise m-0 mb-4 text-[#1f2937] dark:text-[#f2f4ee] font-display text-[clamp(1.5rem,7vw,2.3rem)] sm:text-[clamp(2.7rem,5vw,4.6rem)] font-semibold tracking-[-0.04em] leading-[1.02] text-balance [&>em]:font-semibold [&>em]:text-[#64748b] dark:[&>em]:text-[#94a3b8] [&>em]:not-italic"
               >
                 <span className="block sm:inline">A simple comparison,</span>
                 <br className="hidden sm:block" />
@@ -241,7 +255,9 @@ function PricingPage() {
               {PLANS.map((plan, planIndex) => (
                 <article
                   key={plan.name}
-                  className={`border ${
+                  data-reveal="pending"
+                  style={{ '--card-index': planIndex } as CSSProperties}
+                  className={`reveal-card reveal-rise border ${
                     plan.recommended
                       ? 'border-[#ea580c] bg-[#fed7aa]/30 dark:border-[#9a3412] dark:bg-[#fed7aa]/30'
                       : 'border-[#c7cfc2] bg-white dark:border-[#383838] dark:bg-[#111a17]'
@@ -294,7 +310,8 @@ function PricingPage() {
               ))}
             </div>
             <div
-              className="hidden overflow-x-auto border-y border-[#d9dee7] dark:border-[#383838] focus-visible:outline-2 focus-visible:outline-[#ea580c] focus-visible:outline-offset-4 lg:block"
+              data-reveal="pending"
+              className="reveal-fade hidden overflow-x-auto border-y border-[#d9dee7] dark:border-[#383838] focus-visible:outline-2 focus-visible:outline-[#ea580c] focus-visible:outline-offset-4 lg:block"
               tabIndex={0}
               aria-label="Scrollable plan comparison"
             >
@@ -327,11 +344,12 @@ function PricingPage() {
                   {COMPARISON_ROWS.map((row, rowIndex) => (
                     <tr
                       key={row.label}
-                      className={
+                      style={revealDelay(160 + rowIndex * 70)}
+                      className={`reveal-rise ${
                         rowIndex === COMPARISON_ROWS.length - 1
                           ? '[&>th]:border-b-0 [&>td]:border-b-0'
                           : ''
-                      }
+                      }`}
                     >
                       <th
                         scope="row"
@@ -365,19 +383,21 @@ function PricingPage() {
           <section
             className="py-[92px] md:py-[120px] pb-[100px] md:pb-[132px] px-6 text-center bg-[#fed7aa] dark:bg-[#fed7aa] dark:border-t dark:border-[#c2410c]/30"
             aria-labelledby="pricing-closing-title"
+            data-reveal="pending"
           >
-            <p className="mb-5 text-[#ea580c] dark:text-[#9a3412] text-[0.72rem] font-bold tracking-[0.08em] uppercase">
+            <p className="reveal-fade mb-5 text-[#ea580c] dark:text-[#9a3412] text-[0.72rem] font-bold tracking-[0.08em] uppercase">
               No pressure, just a beginning
             </p>
             <h2
               id="pricing-closing-title"
-              className="m-0 mb-7.5 text-[#1f2937] dark:text-[#1f2937] font-display text-[clamp(3rem,6vw,5.6rem)] font-semibold tracking-[-0.04em] leading-[1.02] [&>em]:font-semibold [&>em]:text-[#64748b] dark:[&>em]:text-[#9a3412] [&>em]:not-italic"
+              style={revealDelay(120)}
+              className="reveal-rise m-0 mb-7.5 text-[#1f2937] dark:text-[#1f2937] font-display text-[clamp(3rem,6vw,5.6rem)] font-semibold tracking-[-0.04em] leading-[1.02] [&>em]:font-semibold [&>em]:text-[#64748b] dark:[&>em]:text-[#9a3412] [&>em]:not-italic"
             >
               Start with today.
               <br />
               <em>Decide the rest later.</em>
             </h2>
-            <div className="flex flex-col items-center gap-4">
+            <div className="reveal-rise flex flex-col items-center gap-4" style={revealDelay(280)}>
               <Link
                 className="inline-flex items-center gap-2.5 rounded-full text-[0.85rem] font-bold px-[21px] py-[15px] btn-primary-strong dark:shadow-[0_4px_16px_rgba(0,0,0,0.3)] transition-all duration-200 hover:-translate-y-0.5"
                 to="/register"

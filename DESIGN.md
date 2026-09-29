@@ -48,8 +48,9 @@ One primary color system, defined once as utilities in `frontend/src/index.css`.
 ## Surface brief: landing page
 
 - Mode: Persuade.
+- Motion: every landing section rises in once as it scrolls into view (hero on load, then intro, cards, quote and closing CTA). About and pricing use the same `useReveal` entrances. In-page jumps scroll without adding a #hash to the URL.
 - Sequence: photographic hero → paper intro ("Your day is more than a list of things to do.") with three principle cards → botanical-green testimonial band → closing CTA → `SiteFooter`. No eyebrow labels above headings.
-- Principle cards are the one sanctioned card row: `#ecebe5` (dark `#262626`), 20px radius, centered text, orange step number (the 01–03 order is the catch → choose → live flow). Each ends in a small day-sheet vignette pinned to the card bottom: white rows, soft-orange pills, the orange "one thing" row, and a green "Room to live" block. Hover gives a quiet response (pills rise, the one thing lifts while the others dim).
+- Principle cards are the one sanctioned card row: `#ecebe5` (dark `#262626`), 20px radius, centered text, orange step number (the 01–03 order is the catch → choose → live flow). Each ends in a small day-sheet vignette pinned to the card bottom: white rows, soft-orange pills, the orange "one thing" row, and a green "Room to live" block. Hover gives a quiet response (pills rise, the one thing lifts while the others dim). On first scroll into view the intro rises in and the cards stagger in, each vignette telling its step: pills drop in and settle, the one thing lifts above the rest, and the evening fades in. Reduced motion shows the settled state.
 - The testimonial is a single static quote on `#183b37` (dark `#111a17`). The closing CTA is a single-line display heading over an orange pill whose arrow slides in on hover.
 - Preserve existing landing copy, route contracts, navigation, and authentication links.
 - Visual iteration should stay within the established editorial system unless the user explicitly requests a redesign.

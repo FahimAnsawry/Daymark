@@ -17,6 +17,11 @@
   --animate-dialog-fade-in: modalFadeIn 160ms ease-out;
   --animate-modal-slide-up: modalSlideUp 240ms cubic-bezier(0.16, 1, 0.3, 1);
   --animate-dialog-slide-up: modalSlideUp 200ms ease-out;
+  --animate-dialog-panel-in: dialogPanelIn 280ms cubic-bezier(0.16, 1, 0.3, 1);
+  --animate-dialog-panel-out: dialogPanelOut 170ms cubic-bezier(0.4, 0, 1, 1) both;
+  --animate-dialog-fade-out: modalFadeOut 170ms ease-in both;
+  --animate-ring-ripple: ringRipple 1100ms cubic-bezier(0.16, 1, 0.3, 1) 180ms both;
+  --animate-rise-in: riseIn 360ms cubic-bezier(0.16, 1, 0.3, 1) both;
   --animate-sun-rise: sunRise 900ms cubic-bezier(0.16, 1, 0.3, 1) 120ms both;
   --animate-ray-in: rayIn 420ms cubic-bezier(0.16, 1, 0.3, 1) both;
   --animate-strip-fill: stripFill 520ms cubic-bezier(0.16, 1, 0.3, 1) both;
@@ -162,6 +167,59 @@
     }
   }
 
+  @keyframes modalFadeOut {
+    from {
+      opacity: 1;
+    }
+    to {
+      opacity: 0;
+    }
+  }
+
+  @keyframes dialogPanelIn {
+    from {
+      opacity: 0;
+      transform: translateY(16px) scale(0.96);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0) scale(1);
+    }
+  }
+
+  @keyframes dialogPanelOut {
+    from {
+      opacity: 1;
+      transform: translateY(0) scale(1);
+    }
+    to {
+      opacity: 0;
+      transform: translateY(8px) scale(0.97);
+    }
+  }
+
+  @keyframes ringRipple {
+    from {
+      opacity: 0.55;
+      transform: scale(1);
+    }
+    to {
+      opacity: 0;
+      transform: scale(1.75);
+    }
+  }
+
+  @keyframes riseIn {
+    from {
+      opacity: 0;
+      transform: translateY(6px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
   @keyframes modalSlideUp {
     from {
       opacity: 0;
@@ -258,6 +316,86 @@
     *::before,
     *::after {
       @apply scroll-auto transition-none animate-none;
+    }
+  }
+}
+
+/*
+ * Landing page scroll-in entrances. A [data-reveal] target flips from "pending" to "in"
+ * when it scrolls into view (see useReveal in lib/reveal.ts). Each animated element waits for
+ * its card's stagger (--card-delay) plus its own offset (--reveal-delay). The fill mode
+ * is `backwards` so the vignettes' hover transforms still work once the entrance ends.
+ * Under reduced motion none of this applies and everything is shown settled.
+ */
+@media (prefers-reduced-motion: no-preference) {
+  @media (min-width: 48rem) {
+    .reveal-card {
+      --card-delay: calc(var(--card-index, 0) * 140ms);
+    }
+  }
+
+  :is(.reveal-rise, .reveal-land, .reveal-lift, .reveal-fade) {
+    animation-delay: calc(var(--card-delay, 0ms) + var(--reveal-delay, 0ms));
+    animation-fill-mode: backwards;
+  }
+
+  [data-reveal='pending']:is(.reveal-rise, .reveal-land, .reveal-lift, .reveal-fade),
+  [data-reveal='pending'] :is(.reveal-rise, .reveal-land, .reveal-lift, .reveal-fade) {
+    opacity: 0;
+  }
+
+  [data-reveal='in']:is(.reveal-rise),
+  [data-reveal='in'] .reveal-rise {
+    animation-name: revealRise;
+    animation-duration: 760ms;
+    animation-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  /* Open loops drop in and settle, like notes landing on the page. */
+  [data-reveal='in'] .reveal-land {
+    animation-name: revealLand;
+    animation-duration: 640ms;
+    animation-timing-function: cubic-bezier(0.34, 1.4, 0.64, 1);
+  }
+
+  /* The one thing rises above the rest. */
+  [data-reveal='in'] .reveal-lift {
+    animation-name: revealLift;
+    animation-duration: 820ms;
+    animation-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  [data-reveal='in'] .reveal-fade {
+    animation-name: revealFade;
+    animation-duration: 900ms;
+    animation-timing-function: ease-out;
+  }
+
+  @keyframes revealRise {
+    from {
+      opacity: 0;
+      transform: translateY(24px);
+    }
+  }
+
+  @keyframes revealLand {
+    from {
+      opacity: 0;
+      transform: translateY(-18px) scale(0.92);
+    }
+  }
+
+  @keyframes revealLift {
+    from {
+      opacity: 0;
+      transform: translateY(14px) scale(0.94);
+      box-shadow: 0 0 0 rgba(194, 65, 12, 0);
+    }
+  }
+
+  @keyframes revealFade {
+    from {
+      opacity: 0;
     }
   }
 }

@@ -2,9 +2,9 @@
 
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\BillingController;
-use App\Http\Controllers\Api\CalendarController;
 use App\Http\Controllers\Api\FocusSessionController;
 use App\Http\Controllers\Api\HealthController;
+use App\Http\Controllers\Api\PasswordResetController;
 use App\Http\Controllers\Api\ProjectController;
 use App\Http\Controllers\Api\ProjectInvitationController;
 use App\Http\Controllers\Api\ProjectMemberController;
@@ -48,6 +48,8 @@ Route::get('/health', HealthController::class);
 Route::prefix('auth')->group(function () {
     Route::post('/register', [AuthController::class, 'register']);
     Route::post('/login', [AuthController::class, 'login']);
+    Route::post('/forgot-password', [PasswordResetController::class, 'forgot'])->middleware('throttle:5,1');
+    Route::post('/reset-password', [PasswordResetController::class, 'reset'])->middleware('throttle:10,1');
 
     // Socialite OAuth Routes
     Route::post('/google/demo', [AuthController::class, 'loginWithDemoGoogle']);
@@ -69,9 +71,6 @@ Route::prefix('auth')->group(function () {
 Route::get('/user', function (Request $request) {
     return $request->user();
 })->middleware('auth:sanctum');
-
-// Google redirects the browser here after calendar consent; the user comes from `state`.
-Route::get('/calendar/google/callback', [CalendarController::class, 'callback']);
 
 // Tasks, projects and completion reports (per user)
 Route::middleware('auth:sanctum')->group(function () {
@@ -99,15 +98,9 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/invitations/{token}', [ProjectInvitationController::class, 'show']);
     Route::post('/invitations/{token}/accept', [ProjectInvitationController::class, 'accept']);
 
-    // Calendar status and disconnecting work on any plan, so a lapsed plan can still unlink.
-    Route::get('/calendar', [CalendarController::class, 'show']);
-    Route::delete('/calendar', [CalendarController::class, 'disconnect']);
-
     // Daymark Pro
     Route::middleware('plan:pro')->group(function () {
         Route::post('/projects/{project}/invitations', [ProjectInvitationController::class, 'store']);
-        Route::post('/calendar/google/connect', [CalendarController::class, 'connect']);
-        Route::get('/calendar/events', [CalendarController::class, 'events']);
     });
 
     // Daymark Plus

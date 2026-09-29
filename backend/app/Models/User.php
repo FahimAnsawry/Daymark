@@ -147,11 +147,6 @@ class User extends Authenticatable
         return $this->hasMany(PushSubscription::class);
     }
 
-    public function calendarConnection(): HasOne
-    {
-        return $this->hasOne(CalendarConnection::class);
-    }
-
     /**
      * Projects other people have shared with this user.
      */

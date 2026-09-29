@@ -1,8 +1,8 @@
 import { Link } from '@tanstack/react-router'
 import {
   Bell,
+  CalendarClock,
   CalendarDays,
-  CalendarSync,
   ChartNoAxesCombined,
   ChevronDown,
   CircleHelp,
@@ -28,15 +28,14 @@ import { ThemeToggle } from './ThemeToggle'
 import { UserAvatar } from './UserAvatar'
 
 export type DashboardView =
-  | 'inbox'
   | 'today'
   | 'upcoming'
+  | 'due'
   | 'filters'
   | 'reporting'
   | 'focus'
   | 'shared'
   | 'reminders'
-  | 'calendar'
   | 'search'
   | 'help'
   | 'notifications'
@@ -46,12 +45,12 @@ export type DashboardView =
 export const LINKABLE_VIEWS = [
   'today',
   'upcoming',
+  'due',
   'filters',
   'reporting',
   'focus',
   'shared',
   'reminders',
-  'calendar',
   'help',
 ] as const satisfies readonly DashboardView[]
 export type LinkableView = (typeof LINKABLE_VIEWS)[number]
@@ -77,12 +76,12 @@ const items: readonly [DashboardView, string, typeof Search, PlanId | null][] = 
   ['search', 'Search', Search, null],
   ['today', 'Today', CalendarDays, null],
   ['upcoming', 'Upcoming', CalendarDays, null],
+  ['due', 'Due Tasks', CalendarClock, null],
   ['filters', 'Completed Tasks', LayoutGrid, null],
   ['reporting', 'Reporting', ChartNoAxesCombined, null],
   ['focus', 'Focus sessions', Timer, 'plus'],
   ['shared', 'Shared projects', UsersRound, 'pro'],
   ['reminders', 'Reminders', Bell, 'plus'],
-  ['calendar', 'Calendar', CalendarSync, 'pro'],
 ]
 
 const sidebarIconButtonClass =

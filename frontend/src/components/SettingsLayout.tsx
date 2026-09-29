@@ -26,7 +26,7 @@ type Props = {
 
 /**
  * The frame for settings pages: brand, a way back, a sidebar (a scrolling row on phones)
- * and the page title. Reminders and Calendar live in the dashboard sidebar, not here.
+ * and the page title. Reminders live in the dashboard sidebar, not here.
  * Signed-out visitors go to /login.
  */
 export function SettingsLayout({ title, description, children }: Props) {

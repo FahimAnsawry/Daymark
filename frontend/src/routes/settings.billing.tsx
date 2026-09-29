@@ -1,5 +1,5 @@
 import { createFileRoute } from '@tanstack/react-router'
-import { CreditCard } from 'lucide-react'
+import { CalendarX2, CreditCard } from 'lucide-react'
 import { useState } from 'react'
 import { ConfirmDeleteDialog } from '../components/ConfirmDeleteDialog'
 import {
@@ -177,6 +177,7 @@ function PlanPanel({ billing }: { billing: BillingStatus }) {
             : 'You’ll move to the Free plan straight away. Your tasks stay just as they are.'
         }
         confirmLabel="Cancel plan"
+        icon={CalendarX2}
         onClose={() => setConfirmCancel(false)}
         onConfirm={() => {
           setConfirmCancel(false)

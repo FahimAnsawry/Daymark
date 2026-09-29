@@ -62,14 +62,14 @@ class ProjectApiTest extends TestCase
         $user = User::factory()->create();
         $project = Project::factory()->for($user)->create();
         $projectTask = Task::factory()->for($user)->for($project)->create();
-        $inboxTask = Task::factory()->for($user)->create();
+        $unassignedTask = Task::factory()->for($user)->create();
         Sanctum::actingAs($user);
 
         $this->deleteJson("/api/projects/{$project->id}")->assertOk();
 
         $this->assertModelMissing($project);
         $this->assertModelMissing($projectTask);
-        $this->assertModelExists($inboxTask);
+        $this->assertModelExists($unassignedTask);
     }
 
     public function test_user_cannot_delete_another_users_project(): void

@@ -1,7 +1,7 @@
 import { Lock } from 'lucide-react'
 import { useState } from 'react'
 import { usePlan } from '../lib/auth-context'
-import { formatDuration } from '../lib/calendar'
+import { formatDuration } from '../lib/duration'
 import { localDate, useTaskReport, type TaskReport as Report } from '../lib/tasks'
 import { PlusGate } from './PlusGate'
 
