@@ -69,7 +69,7 @@ import {
   type Reminder,
   type Task,
 } from '../lib/tasks'
-/** The current view and Filters & Labels chip live in the URL, so a reload keeps them. */
+/** The current view and All Tasks chip live in the URL, so a reload keeps them. */
 /** `calendar` is how Google's consent screen reports back; it's shown once, then dropped. */
 type DashboardSearch = {
   view?: DashboardView
@@ -95,6 +95,22 @@ export const Route = createFileRoute('/dashboard')({
   },
 })
 const today = () => new Date().toLocaleDateString('en-CA')
+const DATE_FILTERS = [
+  ['any', 'Any date'],
+  ['overdue', 'Overdue'],
+  ['today', 'Today'],
+  ['tomorrow', 'Tomorrow'],
+  ['week', 'Next 7 days'],
+  ['none', 'No date'],
+  ['custom', 'Custom date'],
+] as const
+const TYPE_FILTERS = [
+  ['all', 'All'],
+  ['daily', 'Daily'],
+  ['reminder', 'Reminder'],
+] as const
+type DateFilter = (typeof DATE_FILTERS)[number][0]
+type TypeFilter = (typeof TYPE_FILTERS)[number][0]
 const moveDate = (date: Date, days: number) => {
   const next = new Date(date)
   next.setDate(next.getDate() + days)
@@ -106,6 +122,24 @@ const dashboardPrimaryClass =
   'inline-flex cursor-pointer items-center justify-center gap-[9px] rounded-full border-0 btn-primary px-[15px] py-[9px] text-sm font-medium uppercase tracking-[0.05em] transition-colors duration-150 motion-reduce:transition-none'
 const sortChipClass =
   'inline-flex h-7 cursor-pointer items-center rounded-full border border-[#d9dee7] bg-transparent px-2.5 text-xs font-medium text-[#475467] transition-colors duration-150 hover:border-[#c2410c] hover:text-[#c2410c] focus-visible:border-[#c2410c] focus-visible:text-[#c2410c] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange-500 dark:border-[#424242] dark:text-[#c9ced6] dark:hover:border-[#fed7aa] dark:hover:text-[#fed7aa] dark:focus-visible:border-[#fed7aa] dark:focus-visible:text-[#fed7aa] dark:focus-visible:outline-[#fed7aa] max-[620px]:hidden motion-reduce:transition-none'
+const matchesDate = (t: Task, f: DateFilter, done: boolean, custom: string) => {
+  const now = today()
+  if (f === 'any') return true
+  if (f === 'none') return !t.due
+  if (!t.due) return false
+  if (f === 'custom') return t.due === custom
+  if (f === 'overdue') return !done && t.due < now
+  if (f === 'today') return t.due === now
+  if (f === 'tomorrow') return t.due === moveDate(new Date(), 1)
+  return t.due >= now && t.due <= moveDate(new Date(), 7)
+}
+const matchesType = (t: Task, f: TypeFilter) => {
+  if (f === 'daily') return !t.reminder
+  if (f === 'reminder') return !!t.reminder
+  return true
+}
+const filterSelectClass =
+  'h-9 cursor-pointer rounded-full border border-[#d9dee7] bg-white px-3 text-sm text-[#1f2937] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange-500 dark:border-[#383838] dark:bg-[#262626] dark:text-[#f3f4f6]'
 const dl = (d: string) =>
   new Date(`${d}T12:00:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
 /** Optimistically added tasks have a temporary negative id until the server responds. */
@@ -116,8 +150,11 @@ function DashboardPage() {
   const nav = useNavigate()
   const searchParams = Route.useSearch()
   const navigateSearch = useNavigate({ from: Route.fullPath })
-  const view = searchParams.view ?? 'inbox'
+  const view = searchParams.view ?? 'filters'
   const filter = searchParams.label ?? ''
+  const [dateFilter, setDateFilter] = useState<DateFilter>('any')
+  const [customDate, setCustomDate] = useState(() => today())
+  const [typeFilter, setTypeFilter] = useState<TypeFilter>('all')
   const calendarResult = searchParams.calendar
   useEffect(() => {
     if (!calendarResult) return
@@ -246,7 +283,7 @@ function DashboardPage() {
       !createProjectMutation.isPending &&
       !projects.includes(view.slice(8))
     )
-      void navigateSearch({ search: (prev) => ({ ...prev, view: 'inbox' }), replace: true })
+      void navigateSearch({ search: (prev) => ({ ...prev, view: 'filters' }), replace: true })
   }, [view, projects, projectsQuery.isSuccess, createProjectMutation.isPending, navigateSearch])
   useEffect(() => {
     if (view === 'search') search.current?.focus()
@@ -339,12 +376,14 @@ function DashboardPage() {
               : view === 'search'
                 ? t.title.toLowerCase().includes(query.toLowerCase())
                 : view === 'filters'
-                  ? !filter || t.label.toLowerCase() === filter.toLowerCase()
+                  ? (!filter || t.label.toLowerCase() === filter.toLowerCase()) &&
+                    matchesDate(t, dateFilter, isTaskDone(t), customDate) &&
+                    matchesType(t, typeFilter)
                   : view.startsWith('project:')
                     ? t.project === view.slice(8)
                     : false,
       ),
-    [tasks, view, query, filter],
+    [tasks, view, query, filter, dateFilter, customDate, typeFilter],
   )
 
   const todayActiveTasks = useMemo(
@@ -372,7 +411,7 @@ function DashboardPage() {
           inbox: 'Inbox',
           today: 'Today',
           upcoming: 'Upcoming',
-          filters: 'Filters & Labels',
+          filters: 'All Tasks',
           reporting: 'Reporting',
           focus: 'Focus sessions',
           shared: 'Shared projects',
@@ -445,7 +484,7 @@ function DashboardPage() {
     } else if (deleteTarget.type === 'project') {
       const { projectName } = deleteTarget
       deleteProjectMutation.mutate(projectName)
-      if (view === `project:${projectName}`) go('inbox')
+      if (view === `project:${projectName}`) go('filters')
       setProject((current) => (current === projectName ? '' : current))
     }
     setDeleteTarget(null)
@@ -1148,17 +1187,40 @@ function DashboardPage() {
             </div>
           )}
           {view === 'filters' && (
-            <div className="mb-[25px] flex flex-wrap gap-2">
-              <button
-                className={`cursor-pointer rounded-full border px-[14px] py-[7px] ${
-                  !filter
-                    ? 'btn-primary border-[#c2410c] dark:border-[#fed7aa]'
-                    : 'border-[#d9dee7] bg-white text-[#1f2937] dark:border-[#383838] dark:bg-[#262626] dark:text-[#f3f4f6]'
-                }`}
-                onClick={() => setFilter('')}
+            <div className="mb-[25px] flex flex-wrap items-center gap-2">
+              <select
+                className={filterSelectClass}
+                aria-label="Filter by date"
+                value={dateFilter}
+                onChange={(event) => setDateFilter(event.target.value as DateFilter)}
               >
-                All labels
-              </button>
+                {DATE_FILTERS.map(([value, text]) => (
+                  <option key={value} value={value}>
+                    {text}
+                  </option>
+                ))}
+              </select>
+              {dateFilter === 'custom' && (
+                <input
+                  type="date"
+                  className={filterSelectClass}
+                  aria-label="Custom date"
+                  value={customDate}
+                  onChange={(event) => setCustomDate(event.target.value)}
+                />
+              )}
+              <select
+                className={filterSelectClass}
+                aria-label="Filter by task type"
+                value={typeFilter}
+                onChange={(event) => setTypeFilter(event.target.value as TypeFilter)}
+              >
+                {TYPE_FILTERS.map(([value, text]) => (
+                  <option key={value} value={value}>
+                    {text}
+                  </option>
+                ))}
+              </select>
               {labels.map((x) => (
                 <button
                   key={x}
@@ -1167,7 +1229,8 @@ function DashboardPage() {
                       ? 'btn-primary border-[#c2410c] dark:border-[#fed7aa]'
                       : 'border-[#d9dee7] bg-white text-[#1f2937] dark:border-[#383838] dark:bg-[#262626] dark:text-[#f3f4f6]'
                   }`}
-                  onClick={() => setFilter(x)}
+                  aria-pressed={filter === x}
+                  onClick={() => setFilter(filter === x ? '' : x)}
                 >
                   {x}
                 </button>
@@ -1335,7 +1398,7 @@ function DashboardPage() {
           onClose={() => setShareTarget(null)}
           onLeft={() => {
             setShareTarget(null)
-            go('inbox')
+            go('filters')
           }}
         />
       )}

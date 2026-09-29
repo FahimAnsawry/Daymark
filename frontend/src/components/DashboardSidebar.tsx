@@ -8,7 +8,6 @@ import {
   CircleHelp,
   CreditCard,
   Folder,
-  Inbox,
   LayoutGrid,
   LogOut,
   Plus,
@@ -45,7 +44,6 @@ export type DashboardView =
 
 /** Views other pages can open directly with `/dashboard?view=…`. */
 export const LINKABLE_VIEWS = [
-  'inbox',
   'today',
   'upcoming',
   'filters',
@@ -77,10 +75,9 @@ type Props = {
 /** Sidebar views; the last value is the plan a view needs, shown as a lock when missing. */
 const items: readonly [DashboardView, string, typeof Search, PlanId | null][] = [
   ['search', 'Search', Search, null],
-  ['inbox', 'Inbox', Inbox, null],
+  ['filters', 'All Tasks', LayoutGrid, null],
   ['today', 'Today', CalendarDays, null],
   ['upcoming', 'Upcoming', CalendarDays, null],
-  ['filters', 'Filters & Labels', LayoutGrid, null],
   ['reporting', 'Reporting', ChartNoAxesCombined, null],
   ['focus', 'Focus sessions', Timer, 'plus'],
   ['shared', 'Shared projects', UsersRound, 'pro'],
