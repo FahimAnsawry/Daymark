@@ -174,7 +174,8 @@ export function AuthPage({ mode }: AuthPageProps) {
       if (response.data?.url) {
         window.location.href = response.data.url
       } else {
-        window.location.href = '/auth/google'
+        const apiOrigin = new URL(api.defaults.baseURL ?? '/api', window.location.origin).origin
+        window.location.href = `${apiOrigin}/auth/google`
       }
     } catch (err: any) {
       setIsGoogleLoading(false)

@@ -1,0 +1,99 @@
+# Render Blueprint: Daymark frontend (static site) + API (Docker).
+# Values marked `sync: false` are asked for in the Render Dashboard when
+# you create the Blueprint, and can be edited later under Environment.
+
+services:
+  # Laravel API, queue worker and scheduler in one container.
+  - type: web
+    name: daymark-api
+    runtime: docker
+    plan: free
+    rootDir: backend
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    healthCheckPath: /up
+    envVars:
+      - key: APP_NAME
+        value: Daymark
+      - key: APP_ENV
+        value: production
+      - key: APP_DEBUG
+        value: 'false'
+      - key: APP_KEY # output of `php artisan key:generate --show`
+        sync: false
+      - key: APP_URL # e.g. https://daymark-api.onrender.com
+        sync: false
+      - key: FRONTEND_URL # e.g. https://daymark-web.onrender.com
+        sync: false
+      - key: LOG_CHANNEL
+        value: stderr
+      - key: LOG_LEVEL
+        value: warning
+
+      # Neon Postgres connection string (postgresql://...?...sslmode=require)
+      - key: DB_CONNECTION
+        value: pgsql
+      - key: DB_URL
+        sync: false
+      - key: DB_SSLMODE
+        value: require
+
+      - key: SESSION_DRIVER
+        value: database
+      - key: CACHE_STORE
+        value: database
+      - key: QUEUE_CONNECTION
+        value: database
+      - key: FILESYSTEM_DISK
+        value: local
+
+      # SMTP from a free mail provider (Resend, Brevo, ...)
+      - key: MAIL_MAILER
+        value: smtp
+      - key: MAIL_HOST
+        sync: false
+      - key: MAIL_PORT
+        sync: false
+      - key: MAIL_USERNAME
+        sync: false
+      - key: MAIL_PASSWORD
+        sync: false
+      - key: MAIL_FROM_ADDRESS
+        sync: false
+      - key: MAIL_FROM_NAME
+        value: Daymark
+
+      # OAuth: callbacks are <APP_URL>/api/auth/{google,github}/callback
+      - key: GOOGLE_CLIENT_ID
+        sync: false
+      - key: GOOGLE_CLIENT_SECRET
+        sync: false
+      - key: GOOGLE_REDIRECT_URI
+        sync: false
+      - key: GITHUB_CLIENT_ID
+        sync: false
+      - key: GITHUB_CLIENT_SECRET
+        sync: false
+      - key: GITHUB_REDIRECT_URI
+        sync: false
+
+      # Web push
+      - key: VAPID_PUBLIC_KEY
+        sync: false
+      - key: VAPID_PRIVATE_KEY
+        sync: false
+
+  # React SPA served from Render's CDN (never sleeps).
+  - type: web
+    name: daymark-web
+    runtime: static
+    rootDir: frontend
+    buildCommand: bun install --frozen-lockfile && bun run build
+    staticPublishPath: dist
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html
+    envVars:
+      - key: VITE_API_URL # e.g. https://daymark-api.onrender.com/api
+        sync: false
